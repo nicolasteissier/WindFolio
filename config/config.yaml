@@ -1,3 +1,7 @@
 paths:
-  raw_data: data/raw/
-  processed_data: data/processed/
+  #raw_data: data/raw/
+  raw_data: /Volumes/SSD/Epfl/Master/MA3/FBD/data/raw/
+  #intermediate_data: data/intermediate/
+  intermediate_data: /Volumes/SSD/Epfl/Master/MA3/FBD/data/intermediate/
+  #processed_data: data/processed/
+  processed_data: /Volumes/SSD/Epfl/Master/MA3/FBD/data/processed/

@@ -1,32 +1,28 @@
 import owtp.config
 import requests
-from requests import Response
-import regex
+from siphon.catalog import TDSCatalog
 from pathlib import Path
 from tqdm import tqdm
+import time
 
 class HourlyWeatherDataFetcher:
     def __init__(self):
         self.config = owtp.config.load_yaml_config()
-
         self.base_dir = Path(self.config['paths']['raw_data']) / "weather/hourly"
-
+        
         self.catalog_base_url = "https://thredds-su.ipsl.fr/thredds/catalog/aeris_thredds/actrisfr_data/665029c8-82b8-4754-9ff4-d558e640b0ba"
-        self.catalog_url_suffix = "catalog.html"
-
         self.file_base_url = "https://thredds-su.ipsl.fr/thredds/fileServer/aeris_thredds/actrisfr_data/665029c8-82b8-4754-9ff4-d558e640b0ba"
-
-#        self.year_range = range(1845, 2024)
-        self.year_range = range(2000, 2002)
-
+        self.year_range = range(1845, 2025)
 
     def fetch_weather_data(self):
         for year in tqdm(self.year_range, desc="Fetching yearly weather data"):
-            year_url = f"{self.catalog_base_url}/{year}/{self.catalog_url_suffix}"
-            response = requests.get(year_url)
-            stations = self.parse_year_available_stations(response)
-            if response.status_code != 200:
-                print(f"Failed to fetch data for year {year}: {response.status_code}. Error message: {response.text}")
+            year_catalog_url = f"{self.catalog_base_url}/{year}/catalog.xml"
+            
+            try:
+                catalog = TDSCatalog(year_catalog_url)
+                stations = self.get_nc_datasets(catalog)
+            except Exception as e:
+                print(f"Failed to fetch catalog for year {year}: {e}")
                 continue
 
             for station in tqdm(stations, desc=f"Fetching station data for year {year}", leave=False):
@@ -36,24 +32,33 @@ class HourlyWeatherDataFetcher:
                 station_file.parent.mkdir(parents=True, exist_ok=True)
 
                 station_url = f"{self.file_base_url}/{year}/{station}"
-                station_response = requests.get(station_url)
-                if station_response.status_code != 200:
-                    print(f"Failed to fetch station file {station} for year {year}: {station_response.status_code}. Error message: {station_response.text}")
-                    continue
-
-                with open(station_file, "w+b") as f:
-                    f.write(station_response.content)
+                self.download_file(station_url, station_file)
+                
+                time.sleep(0.05)  # Polite rate limiting
     
-    def parse_year_available_stations(self, reponse: Response) -> list[str]:
-        PATTERN = r"<a\s+[^>]*href=[\"'][^\"']*/([^/]+\.nc)[\"'][^>]*>"
-
-        return regex.findall(PATTERN, reponse.text, regex.IGNORECASE)
+    def get_nc_datasets(self, catalog):
+        """Extract all .nc datasets from THREDDS catalog"""
+        nc_files = []
+        for ds in catalog.datasets.values():
+            if ds.name.endswith('.nc'):
+                nc_files.append(ds.name)
+        return nc_files
+    
+    def download_file(self, url, filepath):
+        """Download with retry logic"""
+        for attempt in range(3):
+            try:
+                resp = requests.get(url, stream=True, timeout=30)
+                resp.raise_for_status()
+                with open(filepath, 'w+b') as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                return
+            except Exception as e:
+                print(f"Attempt {attempt+1} failed for {filepath.name}: {e}")
+                time.sleep(1)
+        print(f"Failed to download {filepath.name} after 3 attempts")
 
 if __name__ == "__main__":
-    config = owtp.config.load_yaml_config()
-
     fetcher = HourlyWeatherDataFetcher()
-
     fetcher.fetch_weather_data()
-
-    print(f"Fetched data to {config['paths']['raw_data']}/weather/hourly")
