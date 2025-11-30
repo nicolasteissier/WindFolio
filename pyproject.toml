@@ -16,6 +16,9 @@ dependencies = [
     "regex>=2025.11.3",
     "seaborn>=0.13.2",
     "tqdm>=4.67.1",
+    "requests>=2.32.5",
+    "seaborn>=0.13.2",
+    "xlrd>=2.0.2",
 ]
 
 [tool.uv]
