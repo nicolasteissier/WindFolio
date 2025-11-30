@@ -222,6 +222,7 @@ __marimo__/
 data/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+!data/intermediate/.gitkeep
 
 # UV
 uv.lock
