@@ -4,15 +4,23 @@ from siphon.catalog import TDSCatalog
 from pathlib import Path
 from tqdm import tqdm
 import time
+from typing import Literal
 
-class HourlyWeatherDataFetcher:
-    def __init__(self):
+class WeatherDataFetcher:
+    def __init__(self, freq: Literal['hourly', '6minute'] = 'hourly'):
         self.config = owtp.config.load_yaml_config()
-        self.base_dir = Path(self.config['paths']['raw_data']) / "weather/hourly"
+        self.base_dir = Path(self.config['paths']['raw_data']) / "weather" / str(freq)
         
-        self.catalog_base_url = "https://thredds-su.ipsl.fr/thredds/catalog/aeris_thredds/actrisfr_data/665029c8-82b8-4754-9ff4-d558e640b0ba"
-        self.file_base_url = "https://thredds-su.ipsl.fr/thredds/fileServer/aeris_thredds/actrisfr_data/665029c8-82b8-4754-9ff4-d558e640b0ba"
-        self.year_range = range(1845, 2025)
+        if freq == 'hourly':
+            self.catalog_base_url = "https://thredds-su.ipsl.fr/thredds/catalog/aeris_thredds/actrisfr_data/665029c8-82b8-4754-9ff4-d558e640b0ba"
+            self.file_base_url = "https://thredds-su.ipsl.fr/thredds/fileServer/aeris_thredds/actrisfr_data/665029c8-82b8-4754-9ff4-d558e640b0ba"
+        elif freq == '6minute':
+            self.catalog_base_url = "https://thredds-su.ipsl.fr/thredds/catalog/aeris_thredds/actrisfr_data/cbe74172-66e4-4e18-b2cc-31ad11ed934d"
+            self.file_base_url = "https://thredds-su.ipsl.fr/thredds/fileServer/aeris_thredds/actrisfr_data/cbe74172-66e4-4e18-b2cc-31ad11ed934d"
+        else:
+            raise ValueError("Frequency must be either 'hourly' or '6minute'")
+        
+        self.year_range = range(2000, 2025)
 
     def fetch_weather_data(self):
         for year in tqdm(self.year_range, desc="Fetching yearly weather data"):
@@ -60,5 +68,5 @@ class HourlyWeatherDataFetcher:
         print(f"Failed to download {filepath.name} after 3 attempts")
 
 if __name__ == "__main__":
-    fetcher = HourlyWeatherDataFetcher()
+    fetcher = WeatherDataFetcher(freq='hourly')
     fetcher.fetch_weather_data()
