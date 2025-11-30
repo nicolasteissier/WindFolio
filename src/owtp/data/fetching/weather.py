@@ -21,7 +21,6 @@ class HourlyWeatherDataFetcher:
 
 
     def fetch_weather_data(self):
-        all_data = []
         for year in tqdm(self.year_range, desc="Fetching yearly weather data"):
             year_url = f"{self.catalog_base_url}/{year}/{self.catalog_url_suffix}"
             response = requests.get(year_url)
@@ -30,22 +29,20 @@ class HourlyWeatherDataFetcher:
                 print(f"Failed to fetch data for year {year}: {response.status_code}. Error message: {response.text}")
                 continue
 
-            for station_file in tqdm(stations, desc=f"Fetching station data for year {year}", leave=False):
-                station_file = self.base_dir / str(year) / station_file
+            for station in tqdm(stations, desc=f"Fetching station data for year {year}", leave=False):
+                station_file = self.base_dir / str(year) / station
                 if station_file.exists():
                     continue
                 station_file.parent.mkdir(parents=True, exist_ok=True)
 
-                station_url = f"{self.file_base_url}/{year}/{station_file}"
+                station_url = f"{self.file_base_url}/{year}/{station}"
                 station_response = requests.get(station_url)
                 if station_response.status_code != 200:
-                    print(f"Failed to fetch station file {station_file} for year {year}: {station_response.status_code}. Error message: {station_response.text}")
+                    print(f"Failed to fetch station file {station} for year {year}: {station_response.status_code}. Error message: {station_response.text}")
                     continue
 
                 with open(station_file, "w+b") as f:
                     f.write(station_response.content)
-            
-        return all_data
     
     def parse_year_available_stations(self, reponse: Response) -> list[str]:
         PATTERN = r"<a\s+[^>]*href=[\"'][^\"']*/([^/]+\.nc)[\"'][^>]*>"
@@ -57,6 +54,6 @@ if __name__ == "__main__":
 
     fetcher = HourlyWeatherDataFetcher()
 
-    data = fetcher.fetch_weather_data()
+    fetcher.fetch_weather_data()
 
-    print(f"Fetched data for {len(data)} stations.")
+    print(f"Fetched data to {config['paths']['raw_data']}/weather/hourly")
