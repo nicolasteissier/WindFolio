@@ -78,4 +78,5 @@ df_ws = pl.DataFrame({
         14.0,
     ]
 })
+
 print(windspeed_to_MWh(df_ws["wind_speed"]))

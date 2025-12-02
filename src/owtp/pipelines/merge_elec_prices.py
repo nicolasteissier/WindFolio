@@ -57,8 +57,9 @@ class PriceMerger:
             .sort_values("time")
             .reset_index(drop=True)
         ).set_index('time')
-        print(merged)
-        # save merged data
+
+        # Save merged data
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         output_path = self.output_dir / "prices.parquet"
         merged.to_parquet(output_path)
 
@@ -79,5 +80,6 @@ class PriceMerger:
     # 
     # """
 
-merger = PriceMerger()
-merger.merge_prices()
+if __name__ == "__main__":
+    merger = PriceMerger()
+    merger.merge_prices()
