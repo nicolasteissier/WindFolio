@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 import owtp.config
 
+# Turbine power comes from : https://github.com/NREL/turbine-models
 from turbine_models.parser import Turbines
 from turbine_models.tools.extract_power_curve import extract_power_curve
 from turbine_models.tools.power_curve_tools import plot_power_curve
@@ -43,14 +44,15 @@ def interp_power(ws_values: np.ndarray, ws_curve, p_curve) -> np.ndarray:
     p = np.where((ws_values < cut_in) | (ws_values > cut_out), 0.0, p)
     return p
 
-def windspeed_to_kWh(wind_speed_df,turbine_model=None):
+def windspeed_to_MWh(wind_speed_df,turbine_model=None):
     # first load the power curve
     power_curve = get_power_curve(turbine_model)
 
     ws_curve = power_curve["wind_speed"].to_numpy()
     p_curve = power_curve["power_curve_kw"].to_numpy()
     
-    return interp_power(wind_speed_df, ws_curve, p_curve)
+    # Divide by 1000 to get MWh instead of KWh
+    return interp_power(wind_speed_df, ws_curve, p_curve)/1000
 
 
 # Example of how to use the function 
@@ -76,4 +78,4 @@ df_ws = pl.DataFrame({
         14.0,
     ]
 })
-print(windspeed_to_kWh(df_ws["wind_speed"]))
+print(windspeed_to_MWh(df_ws["wind_speed"]))
