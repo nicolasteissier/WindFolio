@@ -24,6 +24,8 @@ dependencies = [
     "dask>=2025.11.0",
     "pyarrow>=22.0.0",
     "turbine-models>=0.2.1",
+    "geopandas>=1.1.1",
+    "geodatasets>=2024.8.0",
 ]
 
 [tool.uv]
