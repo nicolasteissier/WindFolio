@@ -26,6 +26,9 @@ dependencies = [
     "turbine-models>=0.2.1",
     "geopandas>=1.1.1",
     "geodatasets>=2024.8.0",
+    "plotly>=6.5.0",
+    "folium>=0.20.0",
+    "mapclassify>=2.10.0",
 ]
 
 [tool.uv]
