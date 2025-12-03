@@ -28,7 +28,7 @@ class WeatherDataPreprocessor:
     def convert_and_restructure(self, verbose: bool = True):
         """Convert all .nc files to Parquet and restructure by station ID and year"""
         YEAR_RANGE = range(2023, 2025)
-        all_nc_files = list(file for file in sorted(self.input_dir.glob("*/*.nc")) if file.parent.name.isdigit() and int(file.parent.name) in YEAR_RANGE)
+        all_nc_files = list(file for file in sorted(self.input_dir.glob("*/*.nc")) if file.parent.name.isdigit() and int(file.parent.name) in YEAR_RANGE and not file.name.startswith("._"))
 
         if verbose:
             print(f"\nFound {len(all_nc_files)} .nc files for years {YEAR_RANGE.start}-{YEAR_RANGE.stop - 1}")
