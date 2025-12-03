@@ -20,7 +20,7 @@ class WeatherDataFetcher:
         else:
             raise ValueError("Frequency must be either 'hourly' or '6minute'")
         
-        self.year_range = range(2000, 2025)
+        self.year_range = range(2024, 2026)
 
     def fetch_weather_data(self):
         for year in tqdm(self.year_range, desc="Fetching yearly weather data"):
@@ -68,5 +68,5 @@ class WeatherDataFetcher:
         print(f"Failed to download {filepath.name} after 3 attempts")
 
 if __name__ == "__main__":
-    fetcher = WeatherDataFetcher(freq='hourly')
+    fetcher = WeatherDataFetcher(freq='6minute')
     fetcher.fetch_weather_data()
