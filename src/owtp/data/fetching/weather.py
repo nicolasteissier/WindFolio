@@ -4,12 +4,13 @@ from siphon.catalog import TDSCatalog
 from pathlib import Path
 from tqdm import tqdm
 import time
+import cdsapi
 from typing import Literal
 
-class WeatherDataFetcher:
-    def __init__(self, freq: Literal['hourly', '6minute'] = 'hourly'):
+class AerisWeatherDataFetcher:
+    def __init__(self, target: Literal["paths", "paths_local"], freq: Literal['hourly', '6minute'] = 'hourly'):
         self.config = owtp.config.load_yaml_config()
-        self.base_dir = Path(self.config['paths']['raw_data']) / "weather" / str(freq)
+        self.base_dir = Path(self.config[target]['raw_data']) / "weather" / "aeris" / str(freq)
         
         if freq == 'hourly':
             self.catalog_base_url = "https://thredds-su.ipsl.fr/thredds/catalog/aeris_thredds/actrisfr_data/665029c8-82b8-4754-9ff4-d558e640b0ba"
@@ -20,7 +21,7 @@ class WeatherDataFetcher:
         else:
             raise ValueError("Frequency must be either 'hourly' or '6minute'")
         
-        self.year_range = range(2024, 2026)
+        self.year_range = range(2005, 2025)
 
     def fetch_weather_data(self):
         for year in tqdm(self.year_range, desc="Fetching yearly weather data"):
@@ -67,6 +68,63 @@ class WeatherDataFetcher:
                 time.sleep(1)
         print(f"Failed to download {filepath.name} after 3 attempts")
 
+class ERA5WeatherDataFetcher:
+    def __init__(self, target: Literal["paths", "paths_local"]):
+        self.config = owtp.config.load_yaml_config()
+        self.base_dir = Path(self.config[target]['raw_data']) / "weather" / "era5" / "hourly"
+        
+        self.client = cdsapi.Client(sleep_max=30)
+
+        self.year_range = range(2005, 2025)
+
+    def fetch_weather_data(self):
+        """Batch download ERA5 single-levels for France (2005-2024)"""
+        c = cdsapi.Client()
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        
+        # France métropolitaine bounding box (including Corsica)
+        area = [51.1, -5.2, 41.3, 9.6]  # North, West, South, East
+        
+        variables = [
+            '2m_temperature',
+            '10m_u_component_of_wind',
+            '10m_v_component_of_wind',
+        ]
+        
+        years = list(self.year_range)
+        months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+        days = [f'{d:02d}' for d in range(1, 32)]
+        # Generate times based on frequency (e.g., every 1, 5, 10, 15, 30, or 60 minutes)
+        times = [f'{h:02d}:00' for h in range(0, 24)]
+        
+        # Download by month to reduce number of requests
+        for year in tqdm(years, desc="Downloading ERA5 data by year"):
+            for month in tqdm(months, desc=f"Year {year} months", leave=False):
+                    filename = self.base_dir / f'{year}_{month}.nc'
+                    
+                    if filename.exists():
+                        print(f"Skipping {filename} (already exists)")
+                        continue
+                        
+                    print(f"Queueing ERA5 {year} {month} download...")
+                    
+                    c.retrieve(
+                        'reanalysis-era5-single-levels',
+                        {
+                            'product_type': 'reanalysis',
+                            'format': 'netcdf',
+                            'variable': variables,
+                            'year': str(year),
+                            'month': str(month),
+                            'day': days,
+                            'time': times,
+                            'area': area,
+                        },
+                        str(filename)
+                    )
+                    print(f"Queued: {filename}")
+
+
 if __name__ == "__main__":
-    fetcher = WeatherDataFetcher(freq='6minute')
+    fetcher = ERA5WeatherDataFetcher(target="paths_local")
     fetcher.fetch_weather_data()
