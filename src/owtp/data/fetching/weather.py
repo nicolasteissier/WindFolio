@@ -69,29 +69,36 @@ class AerisWeatherDataFetcher:
         print(f"Failed to download {filepath.name} after 3 attempts")
 
 class ERA5WeatherDataFetcher:
+    """Fetcher for ERA5 weather data using CDS API"""
+
+    areas = {
+        "france": [51.1, -5.2, 41.3, 9.6],  # North, West, South, East
+        "germany": [55.1, 5.9, 47.3, 15.0],
+        "spain": [43.8, -9.3, 36.0, 3.3],
+        "italy": [47.1, 6.6, 36.6, 18.5],
+        "poland": [55.0, 14.1, 49.0, 24.2],
+    }
+    
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
         self.base_dir = Path(self.config[target]['raw_data']) / "weather" / "era5" / "hourly"
         
         self.client = cdsapi.Client(sleep_max=30)
 
-        self.year_range = range(2005, 2025)
+        self.year_range = range(2005, 2014)
 
     def fetch_weather_data(self, target_zone: Literal["france"] = "france", verbose: bool = False):
         """Batch download ERA5 single-levels for France (2005-2024)"""
         self.base_dir.mkdir(parents=True, exist_ok=True)
         
         # France métropolitaine bounding box (including Corsica)
-        areas = {
-            "france": [51.1, -5.2, 41.3, 9.6]  # North, West, South, East
-        }
         
-        area = areas[target_zone]
+        area = self.areas[target_zone]
 
         variables = [
-            '2m_temperature',
-            '10m_u_component_of_wind',
-            '10m_v_component_of_wind',
+            #'2m_temperature',
+            #'10m_u_component_of_wind',
+            #'10m_v_component_of_wind',
             'instantaneous_10m_wind_gust',
             'surface_pressure',
         ]
@@ -105,7 +112,7 @@ class ERA5WeatherDataFetcher:
         # Download by month to reduce number of requests
         for year in tqdm(years, desc="Downloading ERA5 data by year"):
             for month in tqdm(months, desc=f"Year {year} months"):
-                    filename = self.base_dir / f'{year}_{month}.nc'
+                    filename = self.base_dir / f'new_{year}_{month}.nc'
                     
                     if filename.exists():
                         if verbose:
