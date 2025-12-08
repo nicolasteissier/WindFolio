@@ -85,21 +85,18 @@ class ERA5WeatherDataFetcher:
         
         self.client = cdsapi.Client(sleep_max=30)
 
-        self.year_range = range(2005, 2012)
+        self.year_range = range(2005, 2025)
 
     def fetch_weather_data(self, target_zone: Literal["france"] = "france", verbose: bool = False):
         """Batch download ERA5 single-levels for France (2005-2024)"""
         self.base_dir.mkdir(parents=True, exist_ok=True)
         
-        # France métropolitaine bounding box (including Corsica)
-        
         area = self.areas[target_zone]
 
         variables = [
-            #'2m_temperature',
-            #'10m_u_component_of_wind',
-            #'10m_v_component_of_wind',
-            'instantaneous_10m_wind_gust',
+            '2m_temperature',
+            '10m_u_component_of_wind',
+            '10m_v_component_of_wind',
             'surface_pressure',
         ]
         
@@ -112,7 +109,7 @@ class ERA5WeatherDataFetcher:
         # Download by month to reduce number of requests
         for year in tqdm(years, desc="Downloading ERA5 data by year"):
             for month in tqdm(months, desc=f"Year {year} months"):
-                    filename = self.base_dir / f'new_{year}_{month}.nc'
+                    filename = self.base_dir / f'{year}_{month}.nc'
                     
                     if filename.exists():
                         if verbose:
@@ -123,7 +120,7 @@ class ERA5WeatherDataFetcher:
                         print(f"Queueing ERA5 {year} {month} download...")
                     
                     self.client.retrieve(
-                        'reanalysis-era5-single-levels',
+                        'reanalysis-era5-land',
                         {
                             'product_type': 'reanalysis',
                             'format': 'netcdf',
