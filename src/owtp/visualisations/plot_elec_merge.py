@@ -38,15 +38,15 @@ print(f"EPEX Spot Ember data range: {epex_spot_ember.index.min()} to {epex_spot_
 plot_start = pd.to_datetime("2005-05-01 00:00:00+00:00", utc=True)
 plot_end = pd.to_datetime("2025-12-01 00:00:00+00:00", utc=True)
 
-LINEWIDTH = .5
+LINEWIDTH = .15
 
-fig, axes = plt.subplots(3, 1, figsize=(6, 6), sharey=True, sharex=True)
+fig, axes = plt.subplots(3, 1, figsize=(5, 5), sharey=True, sharex=True)
 
 axes[0].plot(epex_spot['price_euros_mwh'].loc[plot_start:].index, epex_spot['price_euros_mwh'].loc[plot_start:], label='EPEX Spot Prices (Repo)', linewidth=LINEWIDTH)
 axes[0].set_title("Ewoken/EPEX-Spot-Data (GitHub Repository)")
 
 axes[1].plot(epex_spot_ember['Price (EUR/MWhe)'].loc[:plot_end].index, epex_spot_ember['Price (EUR/MWhe)'].loc[:plot_end], label='EPEX Spot Prices (Ember)', linewidth=LINEWIDTH)
-axes[1].set_title("European Wholesale Electricity Price Data - Ember (France)")
+axes[1].set_title("European Wholesale Electricity Price Data\nEmber (France)")
 axes[1].set_ylabel("Price (EUR/MWhe)")
 
 # Find overlap region
