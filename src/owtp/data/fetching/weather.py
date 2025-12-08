@@ -77,18 +77,23 @@ class ERA5WeatherDataFetcher:
 
         self.year_range = range(2005, 2025)
 
-    def fetch_weather_data(self):
+    def fetch_weather_data(self, target_zone: Literal["france"] = "france", verbose: bool = False):
         """Batch download ERA5 single-levels for France (2005-2024)"""
-        c = cdsapi.Client()
         self.base_dir.mkdir(parents=True, exist_ok=True)
         
         # France métropolitaine bounding box (including Corsica)
-        area = [51.1, -5.2, 41.3, 9.6]  # North, West, South, East
+        areas = {
+            "france": [51.1, -5.2, 41.3, 9.6]  # North, West, South, East
+        }
         
+        area = areas[target_zone]
+
         variables = [
             '2m_temperature',
             '10m_u_component_of_wind',
             '10m_v_component_of_wind',
+            'instantaneous_10m_wind_gust',
+            'surface_pressure',
         ]
         
         years = list(self.year_range)
@@ -99,16 +104,18 @@ class ERA5WeatherDataFetcher:
         
         # Download by month to reduce number of requests
         for year in tqdm(years, desc="Downloading ERA5 data by year"):
-            for month in tqdm(months, desc=f"Year {year} months", leave=False):
+            for month in tqdm(months, desc=f"Year {year} months"):
                     filename = self.base_dir / f'{year}_{month}.nc'
                     
                     if filename.exists():
-                        print(f"Skipping {filename} (already exists)")
+                        if verbose:
+                            print(f"Skipping {filename} (already exists)")
                         continue
                         
-                    print(f"Queueing ERA5 {year} {month} download...")
+                    if verbose:
+                        print(f"Queueing ERA5 {year} {month} download...")
                     
-                    c.retrieve(
+                    self.client.retrieve(
                         'reanalysis-era5-single-levels',
                         {
                             'product_type': 'reanalysis',
@@ -122,9 +129,10 @@ class ERA5WeatherDataFetcher:
                         },
                         str(filename)
                     )
-                    print(f"Queued: {filename}")
+                    if verbose:
+                        print(f"Queued: {filename}")
 
 
 if __name__ == "__main__":
     fetcher = ERA5WeatherDataFetcher(target="paths_local")
-    fetcher.fetch_weather_data()
+    fetcher.fetch_weather_data(verbose=True)
