@@ -26,13 +26,17 @@ for idx, ax in enumerate(axes.flat):
     ax.set_ylabel("Latitude")
     ax.grid(True, which="both", ls="--", lw=0.5, alpha=0.3)
 
-spatial_dims = (ds.sizes['latitude'], ds.sizes['longitude'])
-plt.suptitle(f"Wind speed map projection ({'x'.join(map(str, spatial_dims))})", fontsize=16)
-plt.savefig("reports/figures/era5_map_projection.png", dpi=300, bbox_inches='tight')
-
-# Print the size in km of the spatial dimensions
+# Print of one square, in degrees
 latitudes = ds['latitude'].values
 longitudes = ds['longitude'].values
-lat_km = (latitudes.max() - latitudes.min()) * 111  # Approx. conversion factor
-lon_km = (longitudes.max() - longitudes.min()) * 111 * np.cos(np.deg2rad(latitudes.mean()))  # Adjust for latitude
-print(f"Spatial dimensions of one measurement: {lat_km/spatial_dims[0]:.2f} km (lat) x {lon_km/spatial_dims[1]:.2f} km (lon)")
+lat_step = abs(latitudes[1] - latitudes[0])
+lon_step = abs(longitudes[1] - longitudes[0])
+print(f"Each grid square represents approximately {lat_step:.2f}° latitude by {lon_step:.2f}° longitude.")
+
+spatial_dims = (ds.sizes['latitude'], ds.sizes['longitude'])
+plt.suptitle(f"Wind speed map projection ({'x'.join(map(str, spatial_dims))})", fontsize=16)
+
+plt.figtext(0.5, 0.94, f"Grid square size: ~{lat_step:.2f}° latitude x {lon_step:.2f}° longitude", ha="center", fontsize=12)
+plt.figtext(0.5, 0.92, f"Grid dimensions: {spatial_dims[0]} squares ({spatial_dims[0]*lat_step:.2f}°) latitude x {spatial_dims[1]} squares ({spatial_dims[1]*lon_step:.2f}°) longitude (total {spatial_dims[0]*spatial_dims[1]} squares)", ha="center", fontsize=12)
+
+plt.savefig("reports/figures/era5_map_projection.png", dpi=300, bbox_inches='tight')

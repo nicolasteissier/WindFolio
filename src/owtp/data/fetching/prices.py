@@ -3,14 +3,13 @@ import requests
 from pathlib import Path
 from tqdm import tqdm
 import zipfile
-
-
+from typing import Literal
 
 class EpexSpotRepoHourlyDataFetcher:
-    def __init__(self):
+    def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
 
-        self.base_dir = Path(self.config["paths"]["raw_data"]) / "elec"
+        self.base_dir = Path(self.config[target]["raw_data"]) / "elec"
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
         self.repo_api_url = (
@@ -53,10 +52,10 @@ class EpexSpotRepoHourlyDataFetcher:
             print(f"An error occurred while fetching EPEX spot data from GitHub repository: {e}")
 
 class EpexSpotEmberDataFetcher:
-    def __init__(self):
+    def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
 
-        self.base_dir = Path(self.config["paths"]["raw_data"]) / "elec"
+        self.base_dir = Path(self.config[target]["raw_data"]) / "elec"
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
         self.ember_file_url = "https://storage.googleapis.com/emb-prod-bkt-publicdata/public-downloads/price/outputs/european_wholesale_electricity_price_data_hourly.zip"
@@ -98,10 +97,12 @@ class EpexSpotEmberDataFetcher:
 
 if __name__ == "__main__":
     # Fetch EPEX spot data from GitHub repository
-    repo_fetcher = EpexSpotRepoHourlyDataFetcher()
+    repo_fetcher = EpexSpotRepoHourlyDataFetcher(target="paths_local")
+    print("Fetching EPEX spot data from GitHub repository...")
     repo_fetcher.fetch_epexspot_data_from_repo()
+    print("Fetching EPEX spot data from Ember...")
 
     # Fetch EPEX spot data from Ember
-    ember_fetcher = EpexSpotEmberDataFetcher()
+    ember_fetcher = EpexSpotEmberDataFetcher(target="paths_local")
     ember_fetcher.fetch_epexspot_data_from_ember()
     ember_fetcher.unzip_ember_data_file()

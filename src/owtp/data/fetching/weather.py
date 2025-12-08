@@ -85,7 +85,7 @@ class ERA5WeatherDataFetcher:
         
         self.client = cdsapi.Client(sleep_max=30)
 
-        self.year_range = range(2005, 2014)
+        self.year_range = range(2005, 2012)
 
     def fetch_weather_data(self, target_zone: Literal["france"] = "france", verbose: bool = False):
         """Batch download ERA5 single-levels for France (2005-2024)"""

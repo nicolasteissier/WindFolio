@@ -54,13 +54,6 @@ class WeatherDataPreprocessor:
         if verbose:
             print(f"\nFiltered stations to those with complete data ({expected_years} years). Number of remaining stations: {len(filtered_stations)}")
 
-        # years_count = {station: len(files) for station, files in filtered_stations.items()}
-
-        # if len(filtered_stations) < len(station_files) * 0.25:
-        #     if verbose:
-        #         print("\nLess than 25% of stations have complete data. Applying fallback filtering method.")
-        #     filtered_stations = self.fallback_filtering_stations(station_files, expected_years, verbose=verbose)
-
         # Process each station in parallel
         process_map(self.process_station, filtered_stations.keys(),
                     [filtered_stations[station] for station in filtered_stations.keys()],
@@ -135,22 +128,81 @@ class WeatherDataPreprocessor:
         if verbose:
             print(f"\nSaved weather years stations distribution plot to reports/figures/weather_years_stations_distribution_{self.freq}.png")
 
-    def fallback_filtering_stations(self, station_files: dict, expected_years: int, verbose: bool = True) -> dict:
-        """Fallback method to filter stations when data is incomplete (not all years present)"""
-        filtered_stations = {}
+class Era5WeatherDataPreprocessor:
+    """
+    Converts all .nc weather data files to Parquet format in parallel (year-by-year, `num_workers` processes at a time) using Dask.
+    Reorganizes output into intermediate/parquet/weather/{freq}/{station_id}/{year}
+    """
 
-        for i in range(expected_years):
-            return # TODO
+    def __init__(self, target: Literal["paths", "paths_local"]):
+        self.config = owtp.config.load_yaml_config()
+        self.input_dir = Path(self.config[target]['raw_data']) / "weather" / "era5" / "hourly"
+        self.intermediate_dir = Path(self.config[target]['intermediate_data']) / "csv" / "weather" / "era5" / "hourly"
+        self.processed_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5" / "hourly"
+
+    def restructure_by_location(self, verbose: bool = True):
+        """Convert all .nc files to CSV files by location (lat, lon) in the intermediate directory"""
+
+        all_nc_files = self._get_era5_files(step='intermediate')
+
+        self.intermediate_dir.mkdir(parents=True, exist_ok=True)
 
         if verbose:
-            print(f"\nFallback filtering retained {len(filtered_stations)} stations with complete data.")
+            print(f"\nConverting {len(all_nc_files)} ERA5 .nc files to intermediate CSV files in parallel...")
 
-        return filtered_stations
+        process_map(self._process_raw_file, all_nc_files, max_workers=4, chunksize=1)
+        
+    def convert_to_parquet(self, verbose: bool = True):
+        """Convert all intermediate CSV files to Parquet files in the processed directory"""
+        all_parquet_files = self._get_era5_files(step='processed')
 
+        self.processed_dir.mkdir(parents=True, exist_ok=True)
+
+        if verbose:
+            print(f"\nConverting {len(all_parquet_files)} intermediate ERA5 CSV files to processed Parquet files in parallel...")
+
+        # Process each file in parallel
+        process_map(self._process_intermediate_file, all_parquet_files, max_workers=4, chunksize=1)
+        
+    def _process_raw_file(self, file_path: Path):
+        """Convert a single .nc file into a DataFrame"""
+        try:
+            ds = xr.open_dataset(file_path)
+            df = ds.to_dataframe().reset_index()
+
+            locations = df[['latitude', 'longitude']].drop_duplicates()
+
+            for _, loc in locations.iterrows():
+                lat, lon = loc['latitude'], loc['longitude']
+                loc_df: pd.DataFrame = df[(df['latitude'] == lat) & (df['longitude'] == lon)].set_index(['valid_time'])
+
+                self.intermediate_dir.mkdir(parents=True, exist_ok=True)
+                output_path = self.intermediate_dir / f"{lat:.2f}_{lon:.2f}.csv"
+
+                if output_path.exists():
+                    loc_df.to_csv(output_path, index=True, mode='a', header=False)
+                else:
+                    loc_df.to_csv(output_path, index=True)
+        except Exception as e:
+            raise RuntimeError(f"Failed to process {file_path}: {e}")
+        
+    def _process_intermediate_file(self, file_path: Path):
+        """Convert a single intermediate CSV file into a processed Parquet"""
+        try:
+            df = pd.read_csv(file_path, parse_dates=['valid_time'])
+            output_path = self.processed_dir / f"{file_path.stem}.parquet.gz"
+            df.sort_values('valid_time').to_parquet(output_path, compression='gzip')
+        except Exception as e:
+            raise RuntimeError(f"Failed to process {file_path}: {e}")
+
+    def _get_era5_files(self, step: Literal['intermediate', 'processed']) -> list[Path]:
+        """Get all ERA5 .nc files necessary for the given step"""
+        if step == 'intermediate':
+            return list(file for file in sorted(self.input_dir.glob("*.nc")) if not file.name.startswith("._") and not file.name.startswith("new_"))
+        elif step == 'processed':
+            return list(file for file in sorted(self.intermediate_dir.glob("*.csv")) if not file.name.startswith("._"))
 
 if __name__ == "__main__":
-    # preprocessor_hourly = WeatherDataPreprocessor(freq='hourly')
-    # preprocessor_hourly.convert_and_restructure()
-
-    preprocessor_6minute = WeatherDataPreprocessor(freq='6minute')
-    preprocessor_6minute.convert_and_restructure()
+    era5_preprocessor = Era5WeatherDataPreprocessor(target="paths_local")
+    era5_preprocessor.restructure_by_location()
+    era5_preprocessor.convert_to_parquet()

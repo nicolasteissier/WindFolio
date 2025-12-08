@@ -12,10 +12,10 @@ class PriceMerger:
     Comment
     """
 
-    def __init__(self, freq: Literal['hourly', '6minute'] = 'hourly'):
+    def __init__(self, target: Literal["paths", "paths_local"], freq: Literal['hourly', '6minute'] = 'hourly'):
         self.config = owtp.config.load_yaml_config()
-        self.input_dir = Path(self.config['paths_local']['raw_data']) / "elec"
-        self.output_dir = Path(self.config['paths_local']['intermediate_data']) / "parquet" / "prices" / str(freq)
+        self.input_dir = Path(self.config[target]['raw_data']) / "elec"
+        self.output_dir = Path(self.config[target]['intermediate_data']) / "parquet" / "prices" / str(freq)
 
     def merge_prices(self):
 
@@ -63,23 +63,6 @@ class PriceMerger:
         output_path = self.output_dir / "prices.parquet"
         merged.to_parquet(output_path)
 
-
-    def plot_prices(prices):
-        plt.figure(figsize=(12, 6))
-        plt.plot(prices['time'], prices['Price (EUR/MWhe)'])
-        plt.xlabel('time')
-        plt.ylabel('Price (EUR/MWhe)')
-        plt.title('EPEX Electricity Prices Over Time')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
-
-    #plot_prices(epex_merged[epex_merged['Date']>= '2015-01-01 00:00:00'])
-    #plot_prices(ember_data[ember_data['Date']< '2019-01-01 00:00:00'])
-    #plot_prices(merged)
-    # 
-    # """
-
 if __name__ == "__main__":
-    merger = PriceMerger()
+    merger = PriceMerger(target="paths_local")
     merger.merge_prices()
