@@ -4,7 +4,7 @@ from siphon.catalog import TDSCatalog
 from pathlib import Path
 from tqdm import tqdm
 import time
-import cdsapi
+from ecmwf.datastores import Client
 from typing import Literal
 
 class AerisWeatherDataFetcher:
@@ -83,7 +83,7 @@ class ERA5WeatherDataFetcher:
         self.config = owtp.config.load_yaml_config()
         self.base_dir = Path(self.config[target]['raw_data']) / "weather" / "era5" / "hourly"
         
-        self.client = cdsapi.Client(sleep_max=30)
+        self.client = Client(sleep_max=30)
 
         self.year_range = range(2005, 2025)
 
