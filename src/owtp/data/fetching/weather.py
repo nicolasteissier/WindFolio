@@ -92,7 +92,7 @@ class ERA5WeatherDataFetcher:
             target_zone: Literal["france"] = "france", 
             year_range: tuple[int, int] = (2005, 2025),
             verbose: bool = False):
-        """Batch download ERA5 single-levels for France (2005-2024)"""
+        """Batch download ERA5 and ERA5-Land data from CDS API"""
         active_dir = self.era5_base_dir if dataset == 'era5' else self.era5_land_base_dir
         active_dir.mkdir(parents=True, exist_ok=True)
 
@@ -108,15 +108,17 @@ class ERA5WeatherDataFetcher:
         ]
         
         years = list(range(*year_range))
-        months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
+        months = [['01', '02'], ['03', '04'], ['05', '06'], ['07', '08'], ['09', '10'], ['11', '12']]
+        if dataset == 'era5':
+            months = [[m] for m in sum(months, [])]
         days = [f'{d:02d}' for d in range(1, 32)]
         # Generate times based on frequency (e.g., every 1, 5, 10, 15, 30, or 60 minutes)
         times = [f'{h:02d}:00' for h in range(0, 24)]
         
         # Download by month to reduce number of requests
         for year in tqdm(years, desc="Downloading ERA5 data by year"):
-            for month in tqdm(months, desc=f"Year {year} months"):
-                    filename = active_dir / f'{year}_{month}.nc'
+            for months in tqdm(months, desc=f"Year {year} months"):
+                    filename = active_dir / f'{year}_{"_".join(months)}.nc'
                     
                     if filename.exists():
                         if verbose:
@@ -124,16 +126,17 @@ class ERA5WeatherDataFetcher:
                         continue
                         
                     if verbose:
-                        print(f"Queueing ERA5 {year} {month} download...")
+                        print(f"Queueing ERA5 {year} {months} download...")
                     
                     self.client.retrieve(
                         dataset_id,
                         {
                             'product_type': 'reanalysis',
                             'format': 'netcdf',
+                            'download_format': 'zip' if dataset == 'era5' else 'unarchived',
                             'variable': variables,
                             'year': str(year),
-                            'month': str(month),
+                            'month': months,
                             'day': days,
                             'time': times,
                             'area': area,

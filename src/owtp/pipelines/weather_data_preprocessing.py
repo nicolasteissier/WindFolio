@@ -3,7 +3,7 @@ from tqdm.contrib.concurrent import process_map
 from pathlib import Path
 import xarray as xr
 from typing import Literal
-import dask
+import zipfile
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -136,16 +136,19 @@ class Era5WeatherDataPreprocessor:
 
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
-        self.input_dir = Path(self.config[target]['raw_data']) / "weather" / "era5" / "hourly"
-        self.intermediate_dir = Path(self.config[target]['intermediate_data']) / "csv" / "weather" / "era5" / "hourly"
-        self.processed_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5" / "hourly"
+        self.era5_input_dir = Path(self.config[target]['raw_data']) / "weather" / "era5" / "hourly"
+        self.era5land_input_dir = Path(self.config[target]['raw_data']) / "weather" / "era5_land" / "hourly"
+        self.era5_intermediate_dir = Path(self.config[target]['intermediate_data']) / "csv" / "weather" / "era5" / "hourly"
+        self.era5land_intermediate_dir = Path(self.config[target]['intermediate_data']) / "grib" / "weather" / "era5_land" / "hourly"
+        self.era5_processed_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5" / "hourly"
+        self.era5land_processed_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land" / "hourly"
 
     def restructure_by_location(self, verbose: bool = True):
         """Convert all .nc files to CSV files by location (lat, lon) in the intermediate directory"""
 
         all_nc_files = self._get_era5_files(step='intermediate')
 
-        self.intermediate_dir.mkdir(parents=True, exist_ok=True)
+        self.era5_intermediate_dir.mkdir(parents=True, exist_ok=True)
 
         if verbose:
             print(f"\nConverting {len(all_nc_files)} ERA5 .nc files to intermediate CSV files in parallel...")
@@ -156,7 +159,7 @@ class Era5WeatherDataPreprocessor:
         """Convert all intermediate CSV files to Parquet files in the processed directory"""
         all_parquet_files = self._get_era5_files(step='processed')
 
-        self.processed_dir.mkdir(parents=True, exist_ok=True)
+        self.era5_processed_dir.mkdir(parents=True, exist_ok=True)
 
         if verbose:
             print(f"\nConverting {len(all_parquet_files)} intermediate ERA5 CSV files to processed Parquet files in parallel...")
@@ -176,8 +179,8 @@ class Era5WeatherDataPreprocessor:
                 lat, lon = loc['latitude'], loc['longitude']
                 loc_df: pd.DataFrame = df[(df['latitude'] == lat) & (df['longitude'] == lon)].set_index(['valid_time'])
 
-                self.intermediate_dir.mkdir(parents=True, exist_ok=True)
-                output_path = self.intermediate_dir / f"{lat:.2f}_{lon:.2f}.csv"
+                self.era5_intermediate_dir.mkdir(parents=True, exist_ok=True)
+                output_path = self.era5_intermediate_dir / f"{lat:.2f}_{lon:.2f}.csv"
 
                 if output_path.exists():
                     loc_df.to_csv(output_path, index=True, mode='a', header=False)
@@ -190,7 +193,7 @@ class Era5WeatherDataPreprocessor:
         """Convert a single intermediate CSV file into a processed Parquet"""
         try:
             df = pd.read_csv(file_path, parse_dates=['valid_time'])
-            output_path = self.processed_dir / f"{file_path.stem}.parquet.gz"
+            output_path = self.era5_processed_dir / f"{file_path.stem}.parquet.gz"
             df.sort_values('valid_time').to_parquet(output_path, compression='gzip')
         except Exception as e:
             raise RuntimeError(f"Failed to process {file_path}: {e}")
@@ -198,11 +201,11 @@ class Era5WeatherDataPreprocessor:
     def _get_era5_files(self, step: Literal['intermediate', 'processed']) -> list[Path]:
         """Get all ERA5 .nc files necessary for the given step"""
         if step == 'intermediate':
-            return list(file for file in sorted(self.input_dir.glob("*.nc")) if not file.name.startswith("._") and not file.name.startswith("new_"))
+            return list(file for file in sorted(self.era5_input_dir.glob("*.nc")) if not file.name.startswith("._") and not file.name.startswith("new_"))
         elif step == 'processed':
-            return list(file for file in sorted(self.intermediate_dir.glob("*.csv")) if not file.name.startswith("._"))
+            return list(file for file in sorted(self.era5_intermediate_dir.glob("*.csv")) if not file.name.startswith("._"))
 
 if __name__ == "__main__":
     era5_preprocessor = Era5WeatherDataPreprocessor(target="paths_local")
-    era5_preprocessor.restructure_by_location()
-    era5_preprocessor.convert_to_parquet()
+    #era5_preprocessor.restructure_by_location()
+    #era5_preprocessor.convert_to_parquet()

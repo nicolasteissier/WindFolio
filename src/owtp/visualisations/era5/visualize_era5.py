@@ -1,27 +1,35 @@
-import geopandas as gpd
 import xarray as xr
 import matplotlib.pyplot as plt
-import geodatasets
-import numpy as np
 
-PATH = "data/raw/weather/era5_land/hourly/2005_04.nc"
+PATH = "data/raw/weather/era5_land/hourly/2005_03_04.nc"
 
 # Load data
-ds = xr.open_dataset(PATH, engine="scipy")
+ds = xr.load_dataset(PATH, engine="h5netcdf")
 
 valid_mask = ~(ds["t2m"].isnull() | ds["u10"].isnull() | ds["v10"].isnull() | ds["sp"].isnull())
 ds = ds.where(valid_mask, drop=False)
 
 print(f"Dataset loaded with dimensions:\n{ds.coords}")
+print(f"Variables in dataset:\n{list(ds.data_vars)}")
 
 var1, var2 = "u10", "v10"
 
 # Prepare 3x3 subplots for 9 different times
 fig = plt.figure(figsize=(18, 12))
 
-time = 0
-data: xr.DataArray = np.sqrt((ds[var1].isel(valid_time=time) ** 2) + (ds[var2].isel(valid_time=time) ** 2)) # type: ignore
-im = data.plot(cmap='viridis', add_colorbar=False) # type: ignore
+print(ds.to_dataframe().head())
+
+time = ds.valid_time.values[0]
+data: xr.DataArray = ((ds[var1].sel(valid_time=time) ** 2) + (ds[var2].sel(valid_time=time) ** 2)) ** 0.5
+data_plot = data.plot.pcolormesh(
+    ax=plt.gca(),
+    x='longitude',
+    y='latitude',
+    cmap='viridis',
+    add_colorbar=True,
+    cbar_kwargs={'label': 'Wind Speed (m/s)'}
+)
+plt.title(f"Wind Speed at time index {time}")
 plt.xlabel("Longitude")
 plt.ylabel("Latitude")
 plt.grid(True, which="both", ls="--", lw=0.5, alpha=0.3)
