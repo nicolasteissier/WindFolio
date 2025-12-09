@@ -81,15 +81,22 @@ class ERA5WeatherDataFetcher:
     
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
-        self.base_dir = Path(self.config[target]['raw_data']) / "weather" / "era5" / "hourly"
+        self.era5_base_dir = Path(self.config[target]['raw_data']) / "weather" / "era5" / "hourly"
+        self.era5_land_base_dir = Path(self.config[target]['raw_data']) / "weather" / "era5_land" / "hourly"
         
         self.client = Client(sleep_max=30)
 
-        self.year_range = range(2005, 2025)
-
-    def fetch_weather_data(self, target_zone: Literal["france"] = "france", verbose: bool = False):
+    def fetch_weather_data(
+            self, 
+            dataset: Literal['era5', 'era5land'], 
+            target_zone: Literal["france"] = "france", 
+            year_range: tuple[int, int] = (2005, 2025),
+            verbose: bool = False):
         """Batch download ERA5 single-levels for France (2005-2024)"""
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        active_dir = self.era5_base_dir if dataset == 'era5' else self.era5_land_base_dir
+        active_dir.mkdir(parents=True, exist_ok=True)
+
+        dataset_id = 'reanalysis-era5-single-levels' if dataset == 'era5' else 'reanalysis-era5-land'
         
         area = self.areas[target_zone]
 
@@ -100,7 +107,7 @@ class ERA5WeatherDataFetcher:
             'surface_pressure',
         ]
         
-        years = list(self.year_range)
+        years = list(range(*year_range))
         months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']
         days = [f'{d:02d}' for d in range(1, 32)]
         # Generate times based on frequency (e.g., every 1, 5, 10, 15, 30, or 60 minutes)
@@ -109,7 +116,7 @@ class ERA5WeatherDataFetcher:
         # Download by month to reduce number of requests
         for year in tqdm(years, desc="Downloading ERA5 data by year"):
             for month in tqdm(months, desc=f"Year {year} months"):
-                    filename = self.base_dir / f'{year}_{month}.nc'
+                    filename = active_dir / f'{year}_{month}.nc'
                     
                     if filename.exists():
                         if verbose:
@@ -120,7 +127,7 @@ class ERA5WeatherDataFetcher:
                         print(f"Queueing ERA5 {year} {month} download...")
                     
                     self.client.retrieve(
-                        'reanalysis-era5-land',
+                        dataset_id,
                         {
                             'product_type': 'reanalysis',
                             'format': 'netcdf',
@@ -139,4 +146,8 @@ class ERA5WeatherDataFetcher:
 
 if __name__ == "__main__":
     fetcher = ERA5WeatherDataFetcher(target="paths_local")
-    fetcher.fetch_weather_data(verbose=True)
+    fetcher.fetch_weather_data(
+        dataset='era5land', 
+        target_zone="france", 
+        year_range=(2005, 2025),
+        verbose=True)

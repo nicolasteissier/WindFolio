@@ -6,22 +6,22 @@ import numpy as np
 
 PATH = "data/raw/weather/era5/hourly/2005_01.nc"
 
-# Load world boundaries using geodatasets
-world = gpd.read_file(geodatasets.get_path('naturalearth.land'))
 # Load data
 ds = xr.open_dataset(PATH)
-print(ds.data_vars)
-var1, var2 = list(ds.data_vars)  # Select the wind u and v components
 
-print(ds.to_dataframe())
+valid_mask = ~(ds["t2m"].isnull() | ds["u10"].isnull() | ds["v10"].isnull() | ds["sp"].isnull())
+ds = ds.where(valid_mask, drop=False)
+
+print(f"Dataset loaded with dimensions:\n{ds.coords}")
+
+var1, var2 = "u10", "v10"
 
 # Prepare 3x3 subplots for 9 different times
 fig = plt.figure(figsize=(18, 12))
 
 time = 0
-data = np.sqrt((ds[var1].isel(valid_time=time) ** 2) + (ds[var2].isel(valid_time=time) ** 2))
-im = data.plot(cmap='viridis', add_colorbar=False)
-world.boundary.plot(color='black', linewidth=1)
+data: xr.DataArray = np.sqrt((ds[var1].isel(valid_time=time) ** 2) + (ds[var2].isel(valid_time=time) ** 2)) # type: ignore
+im = data.plot(cmap='viridis', add_colorbar=False) # type: ignore
 plt.xlabel("Longitude")
 plt.ylabel("Latitude")
 plt.grid(True, which="both", ls="--", lw=0.5, alpha=0.3)
@@ -36,7 +36,5 @@ print(f"Each grid square represents approximately {lat_step:.2f}° latitude by {
 spatial_dims = (ds.sizes['latitude'], ds.sizes['longitude'])
 plt.suptitle(f"Wind speed map projection ({'x'.join(map(str, spatial_dims))})", fontsize=16)
 
-#plt.figtext(0.5, 0.94, f"Grid square size: ~{lat_step:.2f}° latitude x {lon_step:.2f}° longitude", ha="center", fontsize=12)
-#plt.figtext(0.5, 0.92, f"Grid dimensions: {spatial_dims[0]} squares ({spatial_dims[0]*lat_step:.2f}°) latitude x {spatial_dims[1]} squares ({spatial_dims[1]*lon_step:.2f}°) longitude (total {spatial_dims[0]*spatial_dims[1]} squares)", ha="center", fontsize=12)
-
 plt.savefig("reports/figures/era5_map_projection.png", dpi=300, bbox_inches='tight')
+plt.close()
