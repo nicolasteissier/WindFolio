@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 import geodatasets
 import numpy as np
 
-PATH = "data/raw/weather/era5/hourly/2005_01.nc"
+PATH = "data/raw/weather/era5_land/hourly/2005_04.nc"
 
 # Load data
-ds = xr.open_dataset(PATH)
+ds = xr.open_dataset(PATH, engine="scipy")
 
 valid_mask = ~(ds["t2m"].isnull() | ds["u10"].isnull() | ds["v10"].isnull() | ds["sp"].isnull())
 ds = ds.where(valid_mask, drop=False)
@@ -36,5 +36,5 @@ print(f"Each grid square represents approximately {lat_step:.2f}° latitude by {
 spatial_dims = (ds.sizes['latitude'], ds.sizes['longitude'])
 plt.suptitle(f"Wind speed map projection ({'x'.join(map(str, spatial_dims))})", fontsize=16)
 
-plt.savefig("reports/figures/era5_map_projection.png", dpi=300, bbox_inches='tight')
+plt.savefig("reports/figures/era5/map_projection.png", dpi=300, bbox_inches='tight')
 plt.close()

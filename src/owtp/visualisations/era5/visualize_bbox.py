@@ -48,7 +48,7 @@ def visualize_all_bounding_boxes():
     plt.legend()
     plt.grid(True, which="both", ls="--", lw=0.5, alpha=0.3)
 
-    output_path = Path("reports/figures/era5_all_bounding_boxes.png")
+    output_path = Path("reports/figures/era5/all_bounding_boxes.png")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"All bounding boxes visualization saved to {output_path}")
