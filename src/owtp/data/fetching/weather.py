@@ -117,8 +117,8 @@ class ERA5WeatherDataFetcher:
         
         # Download by month to reduce number of requests
         for year in tqdm(years, desc="Downloading ERA5 data by year"):
-            for months in tqdm(months, desc=f"Year {year} months"):
-                    filename = active_dir / f'{year}_{"_".join(months)}.nc'
+            for submonths in tqdm(months, desc=f"Year {year} months"):
+                    filename = active_dir / f'{year}_{"_".join(submonths)}.nc'
                     
                     if filename.exists():
                         if verbose:
@@ -126,7 +126,7 @@ class ERA5WeatherDataFetcher:
                         continue
                         
                     if verbose:
-                        print(f"Queueing ERA5 {year} {months} download...")
+                        print(f"Queueing ERA5 {year} {submonths} download...")
                     
                     self.client.retrieve(
                         dataset_id,
@@ -136,7 +136,7 @@ class ERA5WeatherDataFetcher:
                             'download_format': 'zip' if dataset == 'era5' else 'unarchived',
                             'variable': variables,
                             'year': str(year),
-                            'month': months,
+                            'month': submonths,
                             'day': days,
                             'time': times,
                             'area': area,
