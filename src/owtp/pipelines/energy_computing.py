@@ -18,13 +18,13 @@ class EnergyComputing:
 
     def __init__(self, freq: Literal['hourly', '6minute'] = 'hourly'):
         self.config = owtp.config.load_yaml_config()
-        self.input_dir = Path(self.config['paths_local']['intermediate_data']) / "parquet" / "weather" / str(freq)
-        self.output_dir = Path(self.config['paths_local']['intermediate_data']) / "parquet" / "energy" / str(freq)
+        self.input_dir = Path(self.config['paths']['processed_data']) / "parquet" / "weather" / "era5" / str(freq)
+        self.output_dir = Path(self.config['paths']['processed_data']) / "parquet" / "energy" / "era5" / str(freq)
 
     def compute_energy(self, turbine_model="GE_1.5MW", verbose=True):
         """Compute energy from wind speed data using the specified turbine model."""
         
-        station_files = list(self.input_dir.glob("*.parquet"))
+        station_files = list(self.input_dir.glob("*.parquet.gz"))
         
         if verbose:
             print(f"Computing energy using turbine model: {turbine_model}")
@@ -43,26 +43,24 @@ class EnergyComputing:
                 iterator.set_postfix({"station": station_id})
             
             df_weather = pl.read_parquet(weather_file)
-            wind_speed = df_weather["ws"].to_numpy()
+            wind_speed = np.sqrt(df_weather["u10"].to_numpy()**2 + df_weather["u10"].to_numpy()**2)
 
-            print(f"{np.isnan(wind_speed).sum()} missing values in wind speed for station {station_id}")
-            max_number_of_nan = max(max_number_of_nan, np.isnan(wind_speed).sum())
-            print(f"Maximum missing values in any station so far: {max_number_of_nan}")
-            sum_of_nans += np.isnan(wind_speed).sum()
-            print(f"Total missing values so far: {sum_of_nans}")
+
+        
+
+            mwh = self.windspeed_to_MWh(wind_speed, turbine_model=turbine_model)
+            
+            df_energy = pl.DataFrame({
+                "time": df_weather["valid_time"],
+                "latitude": df_weather["latitude"],
+                "longitude": df_weather["longitude"],
+                "mwh": mwh
+            })
 
             
-
-        #     mwh = self.windspeed_to_MWh(wind_speed, turbine_model=turbine_model)
-            
-        #     df_energy = pl.DataFrame({
-        #         "time": df_weather["time"],
-        #         "mwh": mwh
-        #     })
-            
-        #     output_path = self.output_dir / f"{station_id}.parquet"
-        #     output_path.parent.mkdir(parents=True, exist_ok=True)
-        #     df_energy.write_parquet(output_path)
+            output_path = self.output_dir / f"{station_id}"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            df_energy.write_parquet(output_path, compression='gzip')
         
         # if verbose:
         #     print("\nAll stations processed successfully")

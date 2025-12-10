@@ -97,12 +97,12 @@ class EpexSpotEmberDataFetcher:
 
 if __name__ == "__main__":
     # Fetch EPEX spot data from GitHub repository
-    repo_fetcher = EpexSpotRepoHourlyDataFetcher(target="paths_local")
+    repo_fetcher = EpexSpotRepoHourlyDataFetcher(target="paths")
     print("Fetching EPEX spot data from GitHub repository...")
     repo_fetcher.fetch_epexspot_data_from_repo()
     print("Fetching EPEX spot data from Ember...")
 
     # Fetch EPEX spot data from Ember
-    ember_fetcher = EpexSpotEmberDataFetcher(target="paths_local")
+    ember_fetcher = EpexSpotEmberDataFetcher(target="paths")
     ember_fetcher.fetch_epexspot_data_from_ember()
     ember_fetcher.unzip_ember_data_file()

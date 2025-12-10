@@ -15,15 +15,16 @@ class PriceMerger:
     def __init__(self, target: Literal["paths", "paths_local"], freq: Literal['hourly', '6minute'] = 'hourly'):
         self.config = owtp.config.load_yaml_config()
         self.input_dir = Path(self.config[target]['raw_data']) / "elec"
-        self.output_dir = Path(self.config[target]['intermediate_data']) / "parquet" / "prices" / str(freq)
+        self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "prices" / str(freq)
 
     def merge_prices(self):
 
         data = {}   # or use a list if you prefer
-        files = sorted(os.listdir(self.input_dir))
+        files = sorted(file for file in os.listdir(self.input_dir) if not file.startswith('._'))
         for filename in files:
             if filename.endswith(".json"):
                 filepath = os.path.join(self.input_dir, filename)
+                print(filepath)
                 with open(filepath, "r") as f:
                     data[filename] = json.load(f)
 
@@ -64,5 +65,5 @@ class PriceMerger:
         merged.to_parquet(output_path)
 
 if __name__ == "__main__":
-    merger = PriceMerger(target="paths_local")
+    merger = PriceMerger(target="paths")
     merger.merge_prices()
