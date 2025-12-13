@@ -1,13 +1,20 @@
 import owtp.config
-from tqdm.contrib.concurrent import process_map
-from pathlib import Path
-import xarray as xr
 from typing import Literal
-import seaborn as sns
+from pathlib import Path
+
+# Processing
+from tqdm.contrib.concurrent import process_map
+import xarray as xr
 import pandas as pd
-import matplotlib.pyplot as plt
-import regionmask
 import geopandas as gpd
+import regionmask
+import dask
+import dask.dataframe as dd
+from dask.diagnostics.progress import ProgressBar
+
+# Plotting
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 class WeatherDataPreprocessor:
     """
@@ -156,6 +163,14 @@ class Era5WeatherDataPreprocessor:
             )
             print(f"France land mask saved to {self.france_mask_path}")
 
+    def _get_era5land_files(self) -> list[Path]:
+        """Get all raw ERA5-Land .nc files"""
+        return list(file for file in sorted(self.era5land_input_dir.glob("*.nc")) if not file.name.startswith("._"))
+    
+    def _get_masked_era5land_files(self) -> list[Path]:
+        """Get all masked ERA5-Land .nc files in intermediate directory"""
+        return list(file for file in sorted(self.era5land_intermediate_dir.glob("*.nc")) if not file.name.startswith("._"))
+
     def mask_raw_files(self) -> None:
         """Apply France land mask to all raw ERA5-Land .nc files and save to intermediate directory"""
         print("Loading France land mask...")
@@ -172,10 +187,6 @@ class Era5WeatherDataPreprocessor:
             chunksize=1,
         )
 
-    def _get_era5land_files(self) -> list[Path]:
-        """Get all raw ERA5-Land .nc files"""
-        return list(file for file in sorted(self.era5land_input_dir.glob("*.nc")) if not file.name.startswith("._"))
-    
     def _apply_mask_on(self, input_path: Path, mask_ds: xr.Dataset) -> None:
         """Apply France land mask to a dataset"""
         try:
@@ -201,20 +212,20 @@ class Era5WeatherDataPreprocessor:
 
         france_shape = regionmask.from_geopandas(mask_geodf)
 
-        # 2. Grid from reference file
+        # Grid from reference file
         reference_path = self._get_era5land_files()[0]
         ds_ref = xr.open_dataset(reference_path, engine="h5netcdf")
         lons = ds_ref["longitude"]
         lats = ds_ref["latitude"]
 
-        # 3. Region index mask on this grid
+        # Region index mask on this grid
         mask_array = france_shape.mask(lons, lats)  # 2D (lat, lon)
 
         # Assume single region, take its index explicitly
         fr_idx = france_shape.numbers[0]
         inside_france = (mask_array == fr_idx)
 
-        # 4. Save boolean mask
+        # Save boolean mask
         mask_ds = xr.Dataset(
             data_vars={"mask_france": (("latitude", "longitude"), inside_france.data)},
             coords={"latitude": lats, "longitude": lons},
@@ -234,7 +245,70 @@ class Era5WeatherDataPreprocessor:
     def _apply_france_mask(self, ds: xr.Dataset, mask_ds: xr.Dataset) -> xr.Dataset:
         mask = mask_ds["mask_france"]
         return ds.where(mask, other=float("nan"))
+    
+
+    def convert_and_restructure(self, verbose: bool = True) -> None:
+        """
+        Convert all masked .nc files to Parquet with only:
+            ['valid_time', 'latitude', 'longitude', 't2m', 'u10', 'v10', 'sp']
+        and write to era5land_processed_dir, dropping all-NaN rows.
+        """
+        ddf = self._load_as_dask_df()
+
+        vars_to_keep = ["t2m", "u10", "v10", "sp"]
+        keep_cols = ["valid_time", "latitude", "longitude"] + vars_to_keep
+
+        missing = [c for c in keep_cols if c not in ddf.columns]
+        if missing:
+            raise RuntimeError(f"Missing expected columns in DataFrame: {missing}")
+
+        ddf = ddf[keep_cols]
+
+        if verbose:
+            print("Columns at write time:", list(ddf.columns))
+            print(f"Writing Parquet dataset to {self.era5land_processed_dir}")
+
+        with ProgressBar():
+            ddf.to_parquet(
+                self.era5land_processed_dir,
+                engine="pyarrow",
+                compression="snappy",
+                write_index=False,
+                partition_on=["latitude", "longitude"],  # directory per (lat, lon)
+            )
+
+        if verbose:
+            print("Done.")
+
+
+
+    def _load_as_dask_df(self) -> dd.DataFrame:
+        """Load all masked .nc files, flatten to a Dask DataFrame and drop all-NaN rows."""
+        masked_files = self._get_masked_era5land_files()
+
+        print("Loading masked ERA5-Land files...")
+        ds = xr.open_mfdataset(
+            [str(p) for p in masked_files],
+            combine="by_coords",
+            parallel=True,
+            engine="h5netcdf",
+            chunks={"valid_time": 2 * 31 * 24, "latitude": -1, "longitude": -1},
+        )
+
+        print("Converting to Dask DataFrame...")
+        ddf = ds.to_dask_dataframe()        # dims/coords -> index/columns
+        ddf = ddf.reset_index()             # ensure valid_time, latitude, longitude are columns
+
+        ddf["longitude"] = ddf["longitude"].round(1)
+        ddf["latitude"] = ddf["latitude"].round(1)
+
+        # Drop rows where all vars of interest are NaN
+        vars_to_keep = ["t2m", "u10", "v10", "sp"]
+        ddf = ddf.dropna(subset=vars_to_keep, how="all")
+
+        return ddf
 
 if __name__ == "__main__":
     era5_preprocessor = Era5WeatherDataPreprocessor(target="paths")
-    era5_preprocessor.mask_raw_files()
+    #era5_preprocessor.mask_raw_files()
+    era5_preprocessor.convert_and_restructure()
