@@ -3,10 +3,11 @@ from tqdm.contrib.concurrent import process_map
 from pathlib import Path
 import xarray as xr
 from typing import Literal
-import zipfile
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
+import regionmask
+import geopandas as gpd
 
 class WeatherDataPreprocessor:
     """
@@ -136,76 +137,104 @@ class Era5WeatherDataPreprocessor:
 
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
-        self.era5_input_dir = Path(self.config[target]['raw_data']) / "weather" / "era5" / "hourly"
+        
         self.era5land_input_dir = Path(self.config[target]['raw_data']) / "weather" / "era5_land" / "hourly"
-        self.era5_intermediate_dir = Path(self.config[target]['intermediate_data']) / "csv" / "weather" / "era5" / "hourly"
-        self.era5land_intermediate_dir = Path(self.config[target]['intermediate_data']) / "grib" / "weather" / "era5_land" / "hourly"
-        self.era5_processed_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5" / "hourly"
+        self.era5land_input_dir.mkdir(parents=True, exist_ok=True)
+
+        self.era5land_intermediate_dir = Path(self.config[target]['intermediate_data']) / "nc" / "weather" / "era5_land" / "hourly"
+        self.era5land_intermediate_dir.mkdir(parents=True, exist_ok=True)
+
         self.era5land_processed_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land" / "hourly"
+        self.era5land_processed_dir.mkdir(parents=True, exist_ok=True)
 
-    def restructure_by_location(self, verbose: bool = True):
-        """Convert all .nc files to CSV files by location (lat, lon) in the intermediate directory"""
+        self.france_mask_path = Path(self.config[target]['masks']) / "france_land_mask.nc"
+        self.france_mask_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self.france_mask_path.exists():
+            print("Creating France land mask...")
+            self._create_france_mask(
+                output_path=self.france_mask_path,
+            )
+            print(f"France land mask saved to {self.france_mask_path}")
 
-        all_nc_files = self._get_era5_files(step='intermediate')
+    def mask_raw_files(self) -> None:
+        """Apply France land mask to all raw ERA5-Land .nc files and save to intermediate directory"""
+        print("Loading France land mask...")
+        mask_ds = self._load_france_mask()
 
-        self.era5_intermediate_dir.mkdir(parents=True, exist_ok=True)
+        print("Applying France land mask to raw ERA5-Land files...")
+        input_files = self._get_era5land_files()
 
-        if verbose:
-            print(f"\nConverting {len(all_nc_files)} ERA5 .nc files to intermediate CSV files in parallel...")
+        process_map(
+            self._apply_mask_on,
+            input_files,
+            [mask_ds] * len(input_files),
+            max_workers=4,
+            chunksize=1,
+        )
 
-        process_map(self._process_raw_file, all_nc_files, max_workers=4, chunksize=1)
-        
-    def convert_to_parquet(self, verbose: bool = True):
-        """Convert all intermediate CSV files to Parquet files in the processed directory"""
-        all_parquet_files = self._get_era5_files(step='processed')
-
-        self.era5_processed_dir.mkdir(parents=True, exist_ok=True)
-
-        if verbose:
-            print(f"\nConverting {len(all_parquet_files)} intermediate ERA5 CSV files to processed Parquet files in parallel...")
-
-        # Process each file in parallel
-        process_map(self._process_intermediate_file, all_parquet_files, max_workers=4, chunksize=1)
-        
-    def _process_raw_file(self, file_path: Path):
-        """Convert a single .nc file into a DataFrame"""
+    def _get_era5land_files(self) -> list[Path]:
+        """Get all raw ERA5-Land .nc files"""
+        return list(file for file in sorted(self.era5land_input_dir.glob("*.nc")) if not file.name.startswith("._"))
+    
+    def _apply_mask_on(self, input_path: Path, mask_ds: xr.Dataset) -> None:
+        """Apply France land mask to a dataset"""
         try:
-            ds = xr.open_dataset(file_path)
-            df = ds.to_dataframe().reset_index()
-
-            locations = df[['latitude', 'longitude']].drop_duplicates()
-
-            for _, loc in locations.iterrows():
-                lat, lon = loc['latitude'], loc['longitude']
-                loc_df: pd.DataFrame = df[(df['latitude'] == lat) & (df['longitude'] == lon)].set_index(['valid_time'])
-
-                self.era5_intermediate_dir.mkdir(parents=True, exist_ok=True)
-                output_path = self.era5_intermediate_dir / f"{lat:.2f}_{lon:.2f}.csv"
-
-                if output_path.exists():
-                    loc_df.to_csv(output_path, index=True, mode='a', header=False)
-                else:
-                    loc_df.to_csv(output_path, index=True)
+            relative_path = input_path.relative_to(self.era5land_input_dir)
+            
+            output_path = self.era5land_intermediate_dir / relative_path
+            if output_path.exists():
+                return
+            
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            ds = xr.open_dataset(input_path, engine="h5netcdf")
+            ds_masked = self._apply_france_mask(ds, mask_ds)
+            
+            ds_masked.to_netcdf(output_path, engine="h5netcdf")
         except Exception as e:
-            raise RuntimeError(f"Failed to process {file_path}: {e}")
-        
-    def _process_intermediate_file(self, file_path: Path):
-        """Convert a single intermediate CSV file into a processed Parquet"""
-        try:
-            df = pd.read_csv(file_path, parse_dates=['valid_time'])
-            output_path = self.era5_processed_dir / f"{file_path.stem}.parquet.gz"
-            df.sort_values('valid_time').to_parquet(output_path, compression='gzip')
-        except Exception as e:
-            raise RuntimeError(f"Failed to process {file_path}: {e}")
+            print(f"\nFailed to apply mask on {input_path}: {e}")
 
-    def _get_era5_files(self, step: Literal['intermediate', 'processed']) -> list[Path]:
-        """Get all ERA5 .nc files necessary for the given step"""
-        if step == 'intermediate':
-            return list(file for file in sorted(self.era5_input_dir.glob("*.nc")) if not file.name.startswith("._") and not file.name.startswith("new_"))
-        elif step == 'processed':
-            return list(file for file in sorted(self.era5_intermediate_dir.glob("*.csv")) if not file.name.startswith("._"))
+    def _create_france_mask(self, output_path: Path) -> None:
+        # Source "https://simplemaps.com/static/svg/country/fr/all/fr.json"
+        json_path = output_path.parent / "fr.json"
+        mask_geodf = gpd.read_file(json_path)
+
+        france_shape = regionmask.from_geopandas(mask_geodf)
+
+        # 2. Grid from reference file
+        reference_path = self._get_era5land_files()[0]
+        ds_ref = xr.open_dataset(reference_path, engine="h5netcdf")
+        lons = ds_ref["longitude"]
+        lats = ds_ref["latitude"]
+
+        # 3. Region index mask on this grid
+        mask_array = france_shape.mask(lons, lats)  # 2D (lat, lon)
+
+        # Assume single region, take its index explicitly
+        fr_idx = france_shape.numbers[0]
+        inside_france = (mask_array == fr_idx)
+
+        # 4. Save boolean mask
+        mask_ds = xr.Dataset(
+            data_vars={"mask_france": (("latitude", "longitude"), inside_france.data)},
+            coords={"latitude": lats, "longitude": lons},
+        )
+        mask_ds.to_netcdf(output_path, engine="h5netcdf")
+
+
+    def _load_france_mask(self) -> xr.Dataset:
+        """Load the France land mask dataset"""
+        if not self.france_mask_path.exists():
+            self._create_france_mask(
+                output_path=self.france_mask_path,
+            )
+
+        return xr.open_dataset(self.france_mask_path)
+
+    def _apply_france_mask(self, ds: xr.Dataset, mask_ds: xr.Dataset) -> xr.Dataset:
+        mask = mask_ds["mask_france"]
+        return ds.where(mask, other=float("nan"))
 
 if __name__ == "__main__":
-    era5_preprocessor = Era5WeatherDataPreprocessor(target="paths_local")
-    #era5_preprocessor.restructure_by_location()
-    #era5_preprocessor.convert_to_parquet()
+    era5_preprocessor = Era5WeatherDataPreprocessor(target="paths")
+    era5_preprocessor.mask_raw_files()

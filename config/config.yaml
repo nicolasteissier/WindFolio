@@ -3,10 +3,11 @@ paths:
   intermediate_data: /Volumes/SSD/Epfl/Master/MA3/FBD/data/intermediate/
   processed_data: /Volumes/SSD/Epfl/Master/MA3/FBD/data/processed/
   visualisations: /Volumes/SSD/Epfl/Master/MA3/FBD/reports/figures/
-
+  masks: /Volumes/SSD/Epfl/Master/MA3/FBD/data/masks/
 
 paths_local:
   raw_data: data/raw/
   intermediate_data: data/intermediate/
   processed_data: data/processed/
   visualisations: reports/figures/
+  masks: data/masks/
