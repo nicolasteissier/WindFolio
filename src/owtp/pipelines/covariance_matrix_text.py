@@ -6,7 +6,7 @@ from tqdm import tqdm
 import os
 import polars as pl
 
-class covariance_matrix:
+class CovarianceMatrix:
     def __init__(self, target: Literal["paths", "paths_local"], freq: Literal['hourly', '6minute'] = 'hourly'):
         self.config = owtp.config.load_yaml_config()
         self.input_dir = Path(self.config['paths']['processed_data']) / "parquet" / "returns" / str(freq)
@@ -52,7 +52,43 @@ class covariance_matrix:
        # Polars DataFrame: station x station
         print(cov_df)
 
+    def dummy_pandas_df_covariance(self):
+        import time
+
+        dummy_data = {
+            'A': [1, 2, 3, 4, 5],
+            'B': [5, 4, 3, 2, 1],
+            'C': [2, 3, 4, 5, 6]
+        }
+        df = pd.DataFrame(dummy_data)
+        start_time = time.time()
+        cov_matrix = df.cov()
+        end_time = time.time()
+        print(f"Pandas DataFrame covariance computation took {end_time - start_time:.4f} seconds")
+        print("Pandas DataFrame Covariance Matrix:")
+        print(cov_matrix)
+
+    def dummy_dask_df_covariance(self):
+        import dask.dataframe as dd
+        import time
+
+        dummy_data = {
+            'A': [1, 2, 3, 4, 5],
+            'B': [5, 4, 3, 2, 1],
+            'C': [2, 3, 4, 5, 6]
+        }
+        df = pd.DataFrame(dummy_data)
+        dask_df = dd.from_pandas(df, npartitions=2)
+        start_time = time.time()
+        cov_matrix = dask_df.cov().compute()
+        end_time = time.time()
+        print(f"Dask DataFrame covariance computation took {end_time - start_time:.4f} seconds")
+        print("Dask DataFrame Covariance Matrix:")
+        print(cov_matrix)
+        
 
 
 if __name__ == '__main__':
-    covariance_matrix(target='paths', freq='hourly').covariance()
+    test = CovarianceMatrix(target='paths', freq='hourly')
+    test.dummy_pandas_df_covariance()
+    test.dummy_dask_df_covariance()
