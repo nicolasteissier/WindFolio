@@ -8,6 +8,9 @@ from turbine_models.tools.extract_power_curve import extract_power_curve
 from turbine_models.tools.power_curve_tools import plot_power_curve
 from turbine_models.tools.library_tools import check_turbine_library_for_turbine
 from tqdm import tqdm
+import dask.dataframe as dd
+from dask.distributed import Client, LocalCluster
+import os
 
 
 
@@ -16,55 +19,56 @@ class EnergyComputing:
     Compute energy from weather data.
     """
 
-    def __init__(self, freq: Literal['hourly', '6minute'] = 'hourly'):
+    def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
-        self.input_dir = Path(self.config['paths']['processed_data']) / "parquet" / "weather" / "era5" / str(freq)
-        self.output_dir = Path(self.config['paths']['processed_data']) / "parquet" / "energy" / "era5" / str(freq)
+        self.input_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land" / "hourly"
+        self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy" / "era5_land" / "hourly"
 
-    def compute_energy(self, turbine_model="GE_1.5MW", verbose=True):
+    def compute_energy(self, turbine_model="GE_1.5MW", n_workers=None, verbose=True):
         """Compute energy from wind speed data using the specified turbine model."""
         
-        station_files = list(self.input_dir.glob("*.parquet.gz"))
+        if n_workers is None:
+            n_workers = os.cpu_count() // 2 # type: ignore
+        
+        # Distributed scheduler for performance monitoring and memory management
+        cluster = LocalCluster(
+            n_workers=n_workers,
+            threads_per_worker=1,
+            memory_limit='2GB',
+            processes=True,
+            dashboard_address=':8787'
+        )
+        client = Client(cluster)
         
         if verbose:
-            print(f"Computing energy using turbine model: {turbine_model}")
-            print(f"Found {len(station_files)} stations to process\n")
+            print(f"Dask cluster initialized with {n_workers} workers")
+            print(f"Dashboard: {client.dashboard_link}")
         
-        iterator = tqdm(station_files, desc="Processing stations", disable=not verbose)
+        try:
+            ddf = dd.read_parquet(self.input_dir, engine="pyarrow")
 
-        sum_of_nans = 0
-        max_number_of_nan = 0
-        
-        for weather_file in iterator:
-            station_id = weather_file.stem
-            
-            # Update progress bar with current station
             if verbose:
-                iterator.set_postfix({"station": station_id})
-            
-            df_weather = pl.read_parquet(weather_file)
-            wind_speed = np.sqrt(df_weather["u10"].to_numpy()**2 + df_weather["u10"].to_numpy()**2)
-
-
+                print(f"Computing energy using turbine model: {turbine_model}")
         
+            wind_speed = np.sqrt(ddf["u10"].to_numpy()**2 + ddf["u10"].to_numpy()**2)
 
             mwh = self.windspeed_to_MWh(wind_speed, turbine_model=turbine_model)
             
-            df_energy = pl.DataFrame({
-                "time": df_weather["valid_time"],
-                "latitude": df_weather["latitude"],
-                "longitude": df_weather["longitude"],
-                "mwh": mwh
-            })
+            ddf_energy = ddf[["lat_bin", "lon_bin", "valid_time", "latitude", "longitude"]].assign(mwh=mwh)
 
-            
-            output_path = self.output_dir / f"{station_id}"
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            df_energy.write_parquet(output_path, compression='gzip')
+            ddf_energy.to_parquet(
+                self.output_dir,
+                engine="pyarrow",
+                compression="zstd",
+                write_index=False,
+                partition_on=["lat_bin", "lon_bin"],
+            )
         
-        # if verbose:
-        #     print("\nAll stations processed successfully")
-
+            if verbose:
+                print("Done writing Parquet files.")
+        finally:
+            client.close()
+            cluster.close()
 
     def get_power_curve(self, turbine_model="GE_1.5MW"):
         """Get the power curve for a specified turbine model."""
@@ -75,12 +79,12 @@ class EnergyComputing:
             raise ValueError(f"Turbine model '{turbine_model}' not found in the turbine library.")
     
         turb_group = t_lib.find_group_for_turbine(turbine_model)
-        turbine_specs = t_lib.specs(turbine_model, group = turb_group)
+        turbine_specs = t_lib.specs(turbine_model, group = turb_group) # type: ignore
 
-        power_curve = extract_power_curve(turbine_specs)
+        power_curve = extract_power_curve(turbine_specs) # type: ignore
         power_curve = pl.DataFrame({
-            "wind_speed": power_curve["wind_speed"].tolist(),
-            "power_curve_kw": power_curve["power_curve_kw"].tolist(),
+            "wind_speed": power_curve["wind_speed"].tolist(), # type: ignore
+            "power_curve_kw": power_curve["power_curve_kw"].tolist(), # type: ignore
         })
         return power_curve
 
@@ -101,7 +105,7 @@ class EnergyComputing:
         p = np.where((ws_values < cut_in) | (ws_values > cut_out), 0.0, p)
         return p
 
-    def windspeed_to_MWh(self, wind_speed_df, turbine_model=None):
+    def windspeed_to_MWh(self, wind_speed_df, turbine_model):
 
         # first load the power curve
         power_curve = self.get_power_curve(turbine_model)
@@ -113,5 +117,5 @@ class EnergyComputing:
         return self.interp_power(wind_speed_df, ws_curve, p_curve)/1000
     
 if __name__ == "__main__":
-    computer = EnergyComputing(freq='hourly')
-    computer.compute_energy(turbine_model="GE_1.5MW")
+    computer = EnergyComputing(target="paths_local")
+    computer.compute_energy(turbine_model="GE_1.5MW", n_workers=4, verbose=True)

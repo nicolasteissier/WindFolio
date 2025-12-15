@@ -11,6 +11,8 @@ import regionmask
 import dask
 import dask.dataframe as dd
 from dask.diagnostics.progress import ProgressBar
+from dask.distributed import Client, LocalCluster
+import os
 
 # Plotting
 import seaborn as sns
@@ -265,12 +267,9 @@ class Era5WeatherDataPreprocessor:
             spatial_resolution: Grid resolution in degrees for partitioning (default: 1.0°)
                             Smaller = more files but faster spatial queries
                             Larger = fewer files but slower spatial queries
-        """
-        from dask.distributed import Client, LocalCluster
-        import os
-        
+        """        
         if n_workers is None:
-            n_workers = os.cpu_count()
+            n_workers = os.cpu_count() // 2
         
         # Distributed scheduler for performance monitoring and memory management
         cluster = LocalCluster(
