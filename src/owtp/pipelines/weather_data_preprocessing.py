@@ -148,7 +148,7 @@ class Era5WeatherDataPreprocessor:
         self.era5land_input_dir = Path(self.config[target]['raw_data']) / "weather" / "era5_land" / "hourly"
         self.era5land_input_dir.mkdir(parents=True, exist_ok=True)
 
-        self.era5land_intermediate_dir = Path(self.config[target]['intermediate_data']) / "nc" / "weather" / "era5_land" / "hourly"
+        self.era5land_intermediate_dir = Path(self.config[target]['intermediate_data']) / "parquet" / "weather" / "era5_land" / "hourly"
         self.era5land_intermediate_dir.mkdir(parents=True, exist_ok=True)
 
         self.era5land_processed_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land" / "hourly"
@@ -168,8 +168,8 @@ class Era5WeatherDataPreprocessor:
         return list(file for file in sorted(self.era5land_input_dir.glob("*.nc")) if not file.name.startswith("._"))
     
     def _get_masked_era5land_files(self) -> list[Path]:
-        """Get all masked ERA5-Land .nc files in intermediate directory"""
-        return list(file for file in sorted(self.era5land_intermediate_dir.glob("*.nc")) if not file.name.startswith("._"))
+        """Get all masked ERA5-Land .parquet files in intermediate directory"""
+        return list(file for file in sorted(self.era5land_intermediate_dir.glob("*.parquet")) if not file.name.startswith("._"))
 
     def mask_raw_files(self) -> None:
         """Apply France land mask to all raw ERA5-Land .nc files and save to intermediate directory"""
@@ -188,11 +188,10 @@ class Era5WeatherDataPreprocessor:
         )
 
     def _apply_mask_on(self, input_path: Path, mask_ds: xr.Dataset) -> None:
-        """Apply France land mask to a dataset"""
+        """Apply France land mask to a dataset and save as Parquet"""
         try:
-            relative_path = input_path.relative_to(self.era5land_input_dir)
-            
-            output_path = self.era5land_intermediate_dir / relative_path
+            # Change extension to .parquet
+            output_path = self.era5land_intermediate_dir / input_path.with_suffix(".parquet").name
             if output_path.exists():
                 return
             
@@ -201,7 +200,14 @@ class Era5WeatherDataPreprocessor:
             ds = xr.open_dataset(input_path, engine="h5netcdf")
             ds_masked = self._apply_france_mask(ds, mask_ds)
             
-            ds_masked.to_netcdf(output_path, engine="h5netcdf")
+            df = ds_masked.to_dataframe().reset_index()
+            
+            vars_to_keep = ["t2m", "u10", "v10", "sp"]
+            keep_cols = ["valid_time", "latitude", "longitude"] + vars_to_keep
+            
+            df = df[keep_cols].dropna(subset=vars_to_keep, how="all", axis=0)
+
+            df.to_parquet(output_path, engine="pyarrow", compression="snappy", index=False)
         except Exception as e:
             print(f"\nFailed to apply mask on {input_path}: {e}")
 
@@ -247,68 +253,92 @@ class Era5WeatherDataPreprocessor:
         return ds.where(mask, other=float("nan"))
     
 
-    def convert_and_restructure(self, verbose: bool = True) -> None:
+    def restructure(self, verbose: bool = True, n_workers: int = 4, spatial_resolution: float = 1.0) -> None:
         """
-        Convert all masked .nc files to Parquet with only:
-            ['valid_time', 'latitude', 'longitude', 't2m', 'u10', 'v10', 'sp']
-        and write to era5land_processed_dir, dropping all-NaN rows.
+        Convert all masked files to Parquet with optimized parallelization.
+        Uses distributed scheduler for better performance and memory management.
+        Partitions by coarse spatial grid for efficient time-series access per location.
+        
+        Args:
+            verbose: Print progress information
+            n_workers: Number of Dask workers (defaults to CPU count)
+            spatial_resolution: Grid resolution in degrees for partitioning (default: 1.0°)
+                            Smaller = more files but faster spatial queries
+                            Larger = fewer files but slower spatial queries
         """
-        ddf = self._load_as_dask_df()
-
-        vars_to_keep = ["t2m", "u10", "v10", "sp"]
-        keep_cols = ["valid_time", "latitude", "longitude"] + vars_to_keep
-
-        missing = [c for c in keep_cols if c not in ddf.columns]
-        if missing:
-            raise RuntimeError(f"Missing expected columns in DataFrame: {missing}")
-
-        ddf = ddf[keep_cols]
-
+        from dask.distributed import Client, LocalCluster
+        import os
+        
+        if n_workers is None:
+            n_workers = os.cpu_count()
+        
+        # Distributed scheduler for performance monitoring and memory management
+        cluster = LocalCluster(
+            n_workers=n_workers,
+            threads_per_worker=1,
+            memory_limit='2GB',
+            processes=True,
+            dashboard_address=':8787'
+        )
+        client = Client(cluster)
+        
         if verbose:
-            print("Columns at write time:", list(ddf.columns))
-            print(f"Writing Parquet dataset to {self.era5land_processed_dir}")
-
-        with ProgressBar():
-            ddf.to_parquet(
-                self.era5land_processed_dir,
-                engine="pyarrow",
-                compression="snappy",
-                write_index=False,
-                partition_on=["latitude", "longitude"],  # directory per (lat, lon)
-            )
-
-        if verbose:
-            print("Done.")
-
+            print(f"Dask cluster initialized with {n_workers} workers")
+            print(f"Dashboard: {client.dashboard_link}")
+        
+        try:
+            ddf = self._load_as_dask_df()
+            
+            # Create coarse spatial grid for partitioning
+            ddf['lat_bin'] = (ddf['latitude'] / spatial_resolution).round().astype(int) * spatial_resolution
+            ddf['lon_bin'] = (ddf['longitude'] / spatial_resolution).round().astype(int) * spatial_resolution
+            
+            if verbose:
+                print(f"Spatial grid: {spatial_resolution}° resolution")
+                print(f"Columns at write time: {list(ddf.columns)}")
+                print(f"Number of partitions: {ddf.npartitions}")
+                print(f"Writing Parquet dataset to {self.era5land_processed_dir}")
+            
+            with ProgressBar():
+                ddf.to_parquet(
+                    self.era5land_processed_dir,
+                    engine="pyarrow",
+                    compression="zstd",
+                    write_index=False,
+                    partition_on=["lat_bin", "lon_bin"],
+                )
+            
+            if verbose:
+                print("Done writing Parquet files.")
+        finally:
+            client.close()
+            cluster.close()
 
 
     def _load_as_dask_df(self) -> dd.DataFrame:
-        """Load all masked .nc files, flatten to a Dask DataFrame and drop all-NaN rows."""
+        """Load all masked Parquet files with optimized configuration."""
         masked_files = self._get_masked_era5land_files()
 
-        print("Loading masked ERA5-Land files...")
-        ds = xr.open_mfdataset(
-            [str(p) for p in masked_files],
-            combine="by_coords",
-            parallel=True,
-            engine="h5netcdf",
-            chunks={"valid_time": 2 * 31 * 24, "latitude": -1, "longitude": -1},
+        print(f"Loading {len(masked_files)} masked ERA5-Land Parquet files...")
+        # blocksize controls partition size (smaller = more parallelism)
+        ddf = dd.read_parquet(
+            [str(file) for file in masked_files],
+            engine="pyarrow",
+            blocksize="128MB",
         )
 
-        print("Converting to Dask DataFrame...")
-        ddf = ds.to_dask_dataframe()        # dims/coords -> index/columns
-        ddf = ddf.reset_index()             # ensure valid_time, latitude, longitude are columns
-
-        ddf["longitude"] = ddf["longitude"].round(1)
-        ddf["latitude"] = ddf["latitude"].round(1)
-
-        # Drop rows where all vars of interest are NaN
-        vars_to_keep = ["t2m", "u10", "v10", "sp"]
-        ddf = ddf.dropna(subset=vars_to_keep, how="all")
+        # Round lat/lon to 0.1 degree for consistent precision
+        ddf["longitude"] = (ddf["longitude"] * 10).round() / 10
+        ddf["latitude"] = (ddf["latitude"] * 10).round() / 10
+        
+        # Ensure valid_time is datetime type
+        if ddf['valid_time'].dtype == 'object':
+            ddf['valid_time'] = dd.to_datetime(ddf['valid_time'])
+        
+        ddf = ddf.map_partitions(lambda df: df.sort_values('valid_time'), meta=ddf)
 
         return ddf
 
 if __name__ == "__main__":
-    era5_preprocessor = Era5WeatherDataPreprocessor(target="paths")
-    #era5_preprocessor.mask_raw_files()
-    era5_preprocessor.convert_and_restructure()
+    era5_preprocessor = Era5WeatherDataPreprocessor(target="paths_local")
+    era5_preprocessor.restructure()
