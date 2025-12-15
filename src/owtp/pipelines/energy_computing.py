@@ -7,7 +7,6 @@ from turbine_models.parser import Turbines
 from turbine_models.tools.extract_power_curve import extract_power_curve
 from turbine_models.tools.power_curve_tools import plot_power_curve
 from turbine_models.tools.library_tools import check_turbine_library_for_turbine
-from tqdm import tqdm
 import dask.dataframe as dd
 from dask.distributed import Client, LocalCluster
 import os
@@ -50,7 +49,7 @@ class EnergyComputing:
             if verbose:
                 print(f"Computing energy using turbine model: {turbine_model}")
         
-            wind_speed = np.sqrt(ddf["u10"].to_numpy()**2 + ddf["u10"].to_numpy()**2)
+            wind_speed = np.sqrt(np.pow(ddf['u10'], 2) + np.pow(ddf['v10'], 2))
 
             mwh = self.windspeed_to_MWh(wind_speed, turbine_model=turbine_model)
             
@@ -113,8 +112,10 @@ class EnergyComputing:
         ws_curve = power_curve["wind_speed"].to_numpy()
         p_curve = power_curve["power_curve_kw"].to_numpy()
         
-        # Divide by 1000 to get MWh instead of KWh
-        return self.interp_power(wind_speed_df, ws_curve, p_curve)/1000
+        def process_partition(ws_series):
+            return self.interp_power(ws_series.values, ws_curve, p_curve) / 1000
+        
+        return wind_speed_df.map_partitions(process_partition, meta=('mwh', 'f8'))
     
 if __name__ == "__main__":
     computer = EnergyComputing(target="paths_local")
