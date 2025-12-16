@@ -3,6 +3,9 @@ from tqdm import tqdm
 import pyarrow.parquet as pq
 import owtp.config as config
 from datetime import datetime
+from typing import Literal
+
+target: Literal['paths', 'paths_local'] = 'paths_local'
 
 COUNT_BIG_FOLDERS = True
 LOG_FILE = Path(__file__).parent / "logs" / "returns_hc.log"
@@ -17,8 +20,8 @@ def count_parquet_rows(directory: Path) -> int:
 
 cfg = config.load_yaml_config()
 
-revenues_dir = Path(cfg['paths']['processed_data']) / "parquet" / "revenues" / "hourly"
-returns_dir = Path(cfg['paths']['processed_data']) / "parquet" / "returns" / "hourly"
+revenues_dir = Path(cfg[target]['processed_data']) / "parquet" / "revenues" / "hourly"
+returns_dir = Path(cfg[target]['processed_data']) / "parquet" / "returns" / "hourly"
 
 log_lines = []
 log_lines.append(f"\n{'='*60}")
@@ -44,7 +47,7 @@ if COUNT_BIG_FOLDERS:
         diff = n_revenues - n_returns
         pct = (diff / n_revenues) * 100
         print(f"\n  OK: Returns < Revenues (expected)")
-        print(f"    Filtered: {diff:,} rows ({pct:.2f}%)")
+        print(f"    Filtered: {diff:,} rows ({pct:.6f}%)")
         log_lines.append(f"Status: OK - Returns < Revenues")
         log_lines.append(f"Filtered: {diff:,} rows ({pct:.2f}%)")
     else:

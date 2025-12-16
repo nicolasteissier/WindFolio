@@ -40,7 +40,7 @@ class ReturnsComputing:
         """
         
         if n_workers is None:
-            n_workers = os.cpu_count() // 2
+            n_workers = os.cpu_count() // 2 # type: ignore
 
         cluster = LocalCluster(
             n_workers=n_workers,
@@ -70,8 +70,13 @@ class ReturnsComputing:
             ddf_revenues = dd.read_parquet(
                 self.input_revenues_dir,
                 engine="pyarrow",
+                split_row_groups="infer",
+                aggregate_files="lon_bin",  # Use partitioning columns to aggregate files
                 calculate_divisions=False  # Faster since we don't need sorted divisions
             )
+
+            if verbose:
+                print(f"Found {ddf_revenues.npartitions} partitions in revenue data.")
             
             ddf_revenues['time'] = dd.to_datetime(ddf_revenues['time'])
 
@@ -99,7 +104,7 @@ class ReturnsComputing:
                 if has_partitioning:
                     print("Partitioning columns 'lat_bin' and 'lon_bin' found. Using optimized groupby.")
                 else:
-                    print("/!\ Warning: Partitioning columns 'lat_bin' and 'lon_bin' not found.")
+                    print("/!\\ Warning: Partitioning columns 'lat_bin' and 'lon_bin' not found.")
                     raise ValueError("Partitioning columns 'lat_bin' and 'lon_bin' not found in revenue data.")
             
             # Process each partition independently (no shuffle since data is already partitioned)
@@ -125,10 +130,13 @@ class ReturnsComputing:
                     # Filter out timestamps right after price gaps (invalid returns)
                     location_df = location_df[~location_df['time'].isin(TIMESTAMPS_TO_IGNORE)]
                     
+                    # Now replace remaining NaN (from first observation) with 0.0
+                    location_df.loc[location_df['return'].isna(), 'return'] = 0.0 # TODO placeholder, to remove
+                    
                     return location_df.drop(columns=['revenue'])
                 
                 # Apply to all locations in this partition
-                return grouped.apply(compute_location_returns)
+                return grouped[['time', 'latitude', 'longitude', 'lat_bin', 'lon_bin', 'revenue']].apply(compute_location_returns)
             
             # Define output metadata (input columns + new 'return' column)
             meta_df = {
