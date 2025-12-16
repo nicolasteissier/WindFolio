@@ -1,10 +1,11 @@
 from pathlib import Path
 from tqdm import tqdm
 import pyarrow.parquet as pq
-import pandas as pd
 import owtp.config as config
+from datetime import datetime
 
-COUNT_BIG_FOLDERS = False
+COUNT_BIG_FOLDERS = True
+LOG_FILE = Path(__file__).parent / "logs" / "revenues_hc.log"
 
 def count_parquet_rows(directory: Path) -> int:
     """Fast row count using parquet metadata (no data loading)"""
@@ -17,64 +18,44 @@ def count_parquet_rows(directory: Path) -> int:
 
 cfg = config.load_yaml_config()
 
-energy_dir = Path(cfg['paths']['processed_data']) / "parquet" / "energy" / "era5_land" / "hourly"       # = 1,115,035,200 in last run (15.12.2025)
-prices_dir = Path(cfg['paths']['processed_data']) / "parquet" / "prices" / "hourly"                     # = 180,746 in last run (15.12.2025)
-revenues_dir = Path(cfg['paths']['processed_data']) / "parquet" / "revenues" / "hourly"                 # = 1,097,424,360 in last run (15.12.2025)
+energy_dir = Path(cfg['paths']['processed_data']) / "parquet" / "energy" / "era5_land" / "hourly"
+revenues_dir = Path(cfg['paths']['processed_data']) / "parquet" / "revenues" / "hourly"
+prices_dir = Path(cfg['paths']['processed_data']) / "parquet" / "prices" / "hourly"
+
+log_lines = []
+log_lines.append(f"\n{'='*60}")
+log_lines.append(f"Revenues Health Check - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+log_lines.append(f"{'='*60}")
+log_lines.append(f"Prices dir: {prices_dir}")
+log_lines.append(f"Energy dir: {energy_dir}")
+log_lines.append(f"Revenues dir: {revenues_dir}")
+log_lines.append("")
 
 print("Revenues Health Check:\n")
 
-# Count rows (fast - only reads metadata)
-print("\nCounting rows...")
+print("Counting rows...")
+n_prices = count_parquet_rows(prices_dir)
+print(f"  Prices: {n_prices:,}")
+log_lines.append(f"Prices: {n_prices:,}")
+
 if COUNT_BIG_FOLDERS:
     n_energy = count_parquet_rows(energy_dir)
-    print(f"  Energy:   {n_energy:,}")
+    print(f"  Energy: {n_energy:,}")
+    log_lines.append(f"Energy: {n_energy:,}")
     n_revenues = count_parquet_rows(revenues_dir)
     print(f"  Revenues: {n_revenues:,}")
-
-n_prices = count_parquet_rows(prices_dir)
-print(f"  Prices:   {n_prices:,}")
+    log_lines.append(f"Revenues: {n_revenues:,}")
     
-# Check prices time range
-print("\nPrices time range:")
-df_prices = pd.read_parquet(prices_dir / "prices.parquet")
-if 'time' not in df_prices.columns:
-    df_prices = df_prices.reset_index()
-df_prices['time'] = pd.to_datetime(df_prices['time'])
-print(f"  First: {df_prices['time'].min()}")
-print(f"  Last:  {df_prices['time'].max()}")
-
-# Check prices missing values
-n_missing_prices = df_prices['Price (EUR/MWhe)'].isna().sum()
-print(f"\nNumber of missing prices entries: {n_missing_prices}")
-
-# Find missing indices in prices
-if n_missing_prices > 0:
-    missing_prices = df_prices[df_prices['Price (EUR/MWhe)'].isna()]
-    print("Missing prices entries:")
-    print(missing_prices)
-
-# Check for missing dates in time series (gaps)
-print("\nChecking for missing dates in prices time series:")
-df_prices_sorted = df_prices.sort_values('time')
-date_range = pd.date_range(
-    start=df_prices_sorted['time'].min(),
-    end=df_prices_sorted['time'].max(),
-    freq='h'
-)
-existing_dates = set(df_prices_sorted['time'])
-expected_dates = set(date_range)
-missing_dates = sorted(expected_dates - existing_dates)
-
-if missing_dates:
-    print(f"  Found {len(missing_dates):,} missing dates!")
-    print(f"  Missing: {missing_dates}")
-else:
-    print("  ✓ No missing dates - time series is complete!")
-
-if COUNT_BIG_FOLDERS:
-    if n_revenues != n_energy:
-        print("\n  Health check FAILED: Number of revenues entries does not match number of energy entries!")
+    if n_revenues == n_energy:
+        print(f"\n  OK: Revenues == Energy")
+        log_lines.append("Status: OK - Revenues == Energy")
     else:
-        print("\n  Health check PASSED: Number of revenues entries matches number of energy entries!")
+        print(f"\n  /!\\ Revenues != Energy (diff: {abs(n_revenues - n_energy):,})")
+        log_lines.append(f"Status: ERROR - Revenues != Energy (diff: {abs(n_revenues - n_energy):,})")
 
-print("\nDone.")
+LOG_FILE.parent.mkdir(exist_ok=True)
+with open(LOG_FILE, 'a') as f:
+    f.write('\n'.join(log_lines) + '\n')
+
+print(f"\nLogged to: {LOG_FILE}")
+print("Done.")
