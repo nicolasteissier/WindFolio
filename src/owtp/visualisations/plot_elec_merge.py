@@ -81,3 +81,41 @@ plt.tight_layout()
 plt.subplots_adjust(bottom=0.15)  # Increase bottom margin for legend
 
 plt.savefig("reports/figures/prices/epex_spot_prices.png", dpi=300)
+
+""" # This is how we identified interest points, and then filtered them manually
+interest_point_threshold = 200
+interest_point_threshold_increase = 2
+interest_points = merged_data[(merged_data['Price (EUR/MWhe)'].pct_change() > interest_point_threshold_increase) & (merged_data['Price (EUR/MWhe)'] > interest_point_threshold)].index
+"""
+
+interest_points = [
+    pd.to_datetime('2006-02-13 17:00:00+00:00'),
+    pd.to_datetime('2007-11-12 19:00:00+00:00'),
+    pd.to_datetime('2009-10-19 05:00:00+00:00'),
+    pd.to_datetime('2012-02-09 07:00:00+00:00'),
+    pd.to_datetime('2016-11-07 17:00:00+00:00'),
+    pd.to_datetime('2016-11-08 17:00:00+00:00'),
+    pd.to_datetime('2016-11-14 17:00:00+00:00'),
+    pd.to_datetime('2022-04-04 05:00:00+00:00'),
+]
+
+fig, axes = plt.subplots(len(interest_points), 1, figsize=(6, 3 * len(interest_points)), sharey=True)
+
+# Plot around each interest point
+for i, (point, ax) in enumerate(zip(interest_points, axes.flatten())):
+    window_start = point - pd.Timedelta(days=2)
+    window_end = point + pd.Timedelta(days=2)
+
+    ax.plot(merged_data.loc[window_start:window_end].index, merged_data.loc[window_start:window_end]['Price (EUR/MWhe)'], label='Merged EPEX Spot Prices', color='green')
+    ax.axvline(point, color='red', linestyle='--', label='Interest Point')
+    ax.set_title(f"Electricity Prices Around Interest Point {i+1} ({point.date()})")
+    ax.set_ylabel("Price (EUR/MWhe)")
+    ax.set_xlabel("Time")
+    # Grid each day
+    ax.grid(which='both', axis='x', linestyle='--', linewidth=0.5)
+    ax.set_xticks(pd.date_range(start=window_start.normalize(), end=window_end.normalize(), freq='D'))
+    ax.set_xticklabels([d.strftime('%Y-%m-%d') if d.day % 2 == 0 else '' for d in pd.date_range(start=window_start.normalize(), end=window_end.normalize(), freq='D')], rotation=45)
+    ax.legend()
+
+plt.tight_layout()
+plt.savefig("reports/figures/prices/epex_spot_interest_points.png", dpi=300)   
