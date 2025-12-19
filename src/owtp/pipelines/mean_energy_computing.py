@@ -150,19 +150,10 @@ class MeanEnergyComputer:
                 print(f"  - Max mean energy: {mean_df['mean_energy'].max():.4f} MWh")
                 print(f"  - Avg mean energy: {mean_df['mean_energy'].mean():.4f} MWh")
             
-            # Create and save location mapping
-            location_map = mean_df[['location', 'latitude', 'longitude']].copy()
-            location_map.to_parquet(self.location_mapping_parquet_file, index=False) 
-            
-            if verbose:
-                print(f"\nSaved location mapping to {self.location_mapping_parquet_file}")
-                print(f"  - Number of locations: {len(location_map)}")
-            
             mean_df.to_csv(self.output_energy_csv_dir / "mean_energy.csv", index=False)
-            location_map.to_csv(self.location_mapping_csv_file, index=False)
             
             if verbose:
-                print("\nMean energy and location mapping also saved as CSV.")
+                print("\nMean energy also saved as CSV.")
                 
         finally:
             client.close()
