@@ -17,8 +17,19 @@ class MeanRevenueComputer:
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
         self.input_revenues_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "hourly"
-        self.output_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "mean"
-        self.output_parquet_dir.mkdir(parents=True, exist_ok=True)
+
+        self.output_revenues_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "mean"
+        self.output_revenues_parquet_dir.mkdir(parents=True, exist_ok=True)
+
+        self.output_revenues_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "revenues" / "mean"
+        self.output_revenues_csv_dir.mkdir(parents=True, exist_ok=True)
+
+        self.location_mapping_parquet_file = Path(self.config[target]['processed_data']) / "parquet" / "locations" / "location_mapping.parquet"
+        self.location_mapping_parquet_file.parent.mkdir(parents=True, exist_ok=True)
+
+        self.location_mapping_csv_file = Path(self.config[target]['processed_data']) / "csv" / "locations" / "location_mapping.csv"
+        self.location_mapping_csv_file.parent.mkdir(parents=True, exist_ok=True)
+
 
     def compute_mean_revenue(self, n_workers=None, verbose=True):
         """
@@ -47,11 +58,11 @@ class MeanRevenueComputer:
 
         try:
             if verbose:
-                print(f"Loading revenues data from {self.input_revenues_dir}...")
+                print(f"\nLoading revenues data from {self.input_revenues_dir}...")
 
             meta = [f for f in self.input_revenues_dir.rglob("*.parquet") if f.name.startswith("._")]
             if verbose and len(meta) > 0:
-                print(f"Found {len(meta)} system files to remove.")
+                print(f"\nFound {len(meta)} system files to remove.")
             iterator = tqdm(meta, desc="Removing system files") if verbose else meta
             for meta_file in iterator:
                 meta_file.unlink()
@@ -66,7 +77,7 @@ class MeanRevenueComputer:
             )
 
             if verbose:
-                print(f"Found {ddf_revenues.npartitions} partitions in revenue data.")
+                print(f"\nFound {ddf_revenues.npartitions} partitions in revenue data.")
             
             # Convert categorical partition columns back to numeric
             ddf_revenues['lat_bin'] = ddf_revenues['lat_bin'].map_partitions(
@@ -79,17 +90,13 @@ class MeanRevenueComputer:
             )
             
             if verbose:
-                print("Computing mean revenue per location...")
+                print("\nComputing mean revenue per location...")
             
             # Check if partitioning columns exist
             has_partitioning = 'lat_bin' in ddf_revenues.columns and 'lon_bin' in ddf_revenues.columns
 
-            if verbose:
-                if has_partitioning:
-                    print("Partitioning columns 'lat_bin' and 'lon_bin' found. Using optimized partition processing.")
-                else:
-                    print("/!\ Warning: Partitioning columns 'lat_bin' and 'lon_bin' not found.")
-                    raise ValueError("Partitioning columns 'lat_bin' and 'lon_bin' not found in revenue data.")
+            if verbose and not has_partitioning:
+                raise ValueError("Partitioning columns 'lat_bin' and 'lon_bin' not found in revenue data.")
             
             # Process each partition independently
             def compute_partition_mean(partition_df):
@@ -122,13 +129,13 @@ class MeanRevenueComputer:
             )
 
             if verbose:
-                print("Collecting results from all partitions...")
+                print("\nCollecting results from all partitions...")
             
             # Compute and collect all partition means
             mean_df = ddf_means.compute()
             
             if verbose:
-                print(f"Computed mean revenue for {len(mean_df)} locations")
+                print(f"\nComputed mean revenue for {len(mean_df)} locations")
             
             # Add location identifier
             mean_df['location'] = mean_df['latitude'].astype(str) + '_' + mean_df['longitude'].astype(str)
@@ -140,30 +147,28 @@ class MeanRevenueComputer:
             mean_df = mean_df.sort_values('location').reset_index(drop=True)
             
             # Save mean revenue (including bins for reference)
-            mean_revenue_path = self.output_dir / "mean_revenue.parquet"
+            mean_revenue_path = self.output_revenues_parquet_dir / "mean_revenue.parquet"
             mean_df.to_parquet(mean_revenue_path, index=False)
             
             if verbose:
-                print(f"Saved mean revenue to {mean_revenue_path}")
+                print(f"\nSaved mean revenue to {mean_revenue_path}")
                 print(f"  - Min mean revenue: {mean_df['mean_revenue'].min():.2f}")
                 print(f"  - Max mean revenue: {mean_df['mean_revenue'].max():.2f}")
                 print(f"  - Avg mean revenue: {mean_df['mean_revenue'].mean():.2f}")
             
             # Create and save location mapping
             location_map = mean_df[['location', 'latitude', 'longitude']].copy()
-            location_mapping_path = self.output_dir / "location_mapping.parquet"
-            location_map.to_parquet(location_mapping_path, index=False)
+            location_map.to_parquet(self.location_mapping_parquet_file, index=False) 
             
             if verbose:
-                print(f"Saved location mapping to {location_mapping_path}")
+                print(f"\nSaved location mapping to {self.location_mapping_parquet_file}")
                 print(f"  - Number of locations: {len(location_map)}")
             
-            mean_df.to_csv(self.output_dir / "mean_revenue.csv", index=False)
-            location_map.to_csv(self.output_dir / "location_mapping.csv", index=False)
+            mean_df.to_csv(self.output_revenues_csv_dir / "mean_revenue.csv", index=False)
+            location_map.to_csv(self.location_mapping_csv_file, index=False)
             
             if verbose:
-                print("CSV versions saved as well")
-                print("Done!")
+                print("\nMean revenue and location mapping also saved as CSV.")
                 
         finally:
             client.close()
@@ -171,5 +176,5 @@ class MeanRevenueComputer:
 
 
 if __name__ == "__main__":
-    computer = MeanRevenueComputer(target="paths")
+    computer = MeanRevenueComputer(target="paths_local")
     computer.compute_mean_revenue(verbose=True)

@@ -22,7 +22,7 @@ class CovarianceMatrixPivot:
         self.output_parquet_dir.mkdir(parents=True, exist_ok=True)
         self.output_csv_dir.mkdir(parents=True, exist_ok=True)
 
-        self.location_mapping_file = self.output_parquet_dir / "location_mapping.parquet"
+        self.location_mapping_file = Path(self.config[target]['processed_data']) / "parquet" / "locations" / "location_mapping.parquet"
 
     def pivot_covariance_matrix(self, chunksize=100000, verbose=True):
         """
