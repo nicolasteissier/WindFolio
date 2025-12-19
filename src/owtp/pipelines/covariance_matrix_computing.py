@@ -16,16 +16,16 @@ class CovarianceMatrixComputer:
     is treated as a separate variable/asset.
     """
 
-    def __init__(self, freq: Literal['hourly', '6minute'] = 'hourly'):
+    def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
-        self.input_returns_dir = Path(self.config['paths']['processed_data']) / "parquet" / "returns" / str(freq)
-        self.output_dir = Path(self.config['paths']['processed_data']) / "parquet" / "covariance" / str(freq)
+        self.input_returns_dir = Path(self.config[target]['processed_data']) / "parquet" / "returns" / "hourly"
+        self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "covariance" / "hourly"
 
     def compute_covariance_matrix(self, n_workers=None, verbose=True):
         """Compute covariance matrix of returns across all locations."""
         
         if n_workers is None:
-            n_workers = os.cpu_count() // 2
+            n_workers = os.cpu_count() // 2 # type: ignore
 
         cluster = LocalCluster(
             n_workers=n_workers,
@@ -52,16 +52,26 @@ class CovarianceMatrixComputer:
                 print("Preparing data for covariance computation:\n")
                 print("Creating location identifier...")
             
+            # read child directories from self.input_returns_dir
+            lat_bins = set(self.input_returns_dir.glob("lat_bin=*"))
+            lon_bins = set(lon_bin for lon_bins in lat_bins for lon_bin in lon_bins.glob("lon_bin=*"))
+
+            possible_locations = set(
+                f"{lat_dir.name.split('=')[1].split('.')[0]}.{lat_decimal}_{lon_dir.name.split('=')[1].split('.')[0]}.{lon_decimal}"
+                for lat_dir in lat_bins
+                for lon_dir in lon_bins
+                for lat_decimal in range(10)
+                for lon_decimal in range(10)
+            )
+
             # Create a unique location identifier (lat_lon_key)
             ddf_returns['location'] = (
-                ddf_returns['latitude'].round(6).astype(str) + '_' + 
-                ddf_returns['longitude'].round(6).astype(str)
-            )
+                ddf_returns['latitude'].round(1).astype(str) + '_' + 
+                ddf_returns['longitude'].round(1).astype(str)
+            ).astype(pd.api.types.CategoricalDtype(list(possible_locations)))
             
             if verbose:
                 print("Location identifier created.\n")
-                print("Dataframe before pivot:")
-                print(ddf_returns.head().compute())
                 print("\nPivoting data to wide format (time x locations)...")
             
             # Pivot: rows=time, columns=location, values=return
@@ -74,8 +84,6 @@ class CovarianceMatrixComputer:
             
             if verbose:
                 print("Data pivoted to wide format.\n")
-                print("Dataframe after pivot:")
-                print(ddf_pivot.head().compute())
                 print("\nComputing covariance matrix...")
             
             cov_matrix_dask = ddf_pivot.cov()
@@ -83,17 +91,10 @@ class CovarianceMatrixComputer:
             if verbose:
                 print("Covariance computation scheduled, now computing...")
             
-            cov_matrix = cov_matrix_dask.compute()
-            
-            if verbose:
-                print(f"Data shape: {ddf_pivot.shape[0].compute()} timestamps × {len(ddf_pivot.columns)} locations")
-                print(f"Covariance matrix shape: {cov_matrix.shape}\n")
-                print("Saving covariance matrix...")
-            
             self.output_dir.mkdir(parents=True, exist_ok=True)
             
             # Save covariance matrix as Parquet
-            cov_matrix.to_parquet(
+            cov_matrix_dask.to_parquet(
                 self.output_dir / "covariance_matrix.parquet",
                 engine="pyarrow",
                 compression="zstd"
@@ -118,5 +119,5 @@ class CovarianceMatrixComputer:
 
 
 if __name__ == "__main__":
-    computer = CovarianceMatrixComputer(freq='hourly')
+    computer = CovarianceMatrixComputer(target="paths_local")
     computer.compute_covariance_matrix(verbose=True)
