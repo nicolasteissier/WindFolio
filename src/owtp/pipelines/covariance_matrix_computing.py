@@ -76,6 +76,10 @@ class CovarianceMatrixComputer:
         # Compute covariance matrix, melt to long format (col1, col2, covariance), and append to CSV
         cov = pivoted.cov()
         cov_melted = cov.reset_index(names="col1").melt(id_vars="col1", var_name="col2", value_name="covariance")
+        
+        # Keep only upper triangle (including diagonal) to avoid duplicates in symmetric matrix
+        cov_melted = cov_melted[cov_melted["col1"] <= cov_melted["col2"]]
+        
         cov_melted.to_csv(self.output_csv, mode="a", header=False, index=False)
 
     def _handle_partition_pairs(self, file_path1: Path, file_path2: Path) -> None:
