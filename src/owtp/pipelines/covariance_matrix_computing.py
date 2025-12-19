@@ -118,14 +118,7 @@ class CovarianceMatrixComputer:
         # Flatten column names
         pivoted.columns = [f"{lat}_{lon}" for lat, lon in pivoted.columns]
 
-        # Drop columns that are all 0
-        pivoted = pivoted.loc[:, (pivoted != 0).any(axis=0)]
-
-        # Keep only columns with variance above a small threshold
-        variances = pivoted.var()
-        valid_columns = variances[variances > 1e-10].index
-        
-        return pivoted[valid_columns]
+        return pivoted
 
 if __name__ == "__main__":
     computer = CovarianceMatrixComputer(target="paths_local")
