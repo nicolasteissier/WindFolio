@@ -2,6 +2,7 @@ paths:
   raw_data: /Volumes/SSD/Epfl/Master/MA3/FBD/data/raw/
   intermediate_data: /Volumes/SSD/Epfl/Master/MA3/FBD/data/intermediate/
   processed_data: /Volumes/SSD/Epfl/Master/MA3/FBD/data/processed/
+  results_data: /Volumes/SSD/Epfl/Master/MA3/FBD/data/results/
   visualisations: /Volumes/SSD/Epfl/Master/MA3/FBD/reports/figures/
   masks: /Volumes/SSD/Epfl/Master/MA3/FBD/data/masks/
 
@@ -9,5 +10,6 @@ paths_local:
   raw_data: data/raw/
   intermediate_data: data/intermediate/
   processed_data: data/processed/
+  results_data: data/results/
   visualisations: reports/figures/
   masks: data/masks/
