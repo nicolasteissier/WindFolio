@@ -46,7 +46,7 @@ class MeanRevenueComputer:
         cluster = LocalCluster(
             n_workers=n_workers,
             threads_per_worker=1,
-            memory_limit='2GB',
+            memory_limit='4GB',
             processes=True,
             dashboard_address=':8788'
         )
@@ -148,6 +148,10 @@ class MeanRevenueComputer:
             
             # Save mean revenue (including bins for reference)
             mean_revenue_path = self.output_revenues_parquet_dir / "mean_revenue.parquet"
+            if mean_revenue_path.exists():
+                mean_revenue_path.unlink()
+                if verbose:
+                    print(f"\nRemoved existing parquet file for mean revenue.")
             mean_df.to_parquet(mean_revenue_path, index=False)
             
             if verbose:
@@ -155,16 +159,34 @@ class MeanRevenueComputer:
                 print(f"  - Min mean revenue: {mean_df['mean_revenue'].min():.2f}")
                 print(f"  - Max mean revenue: {mean_df['mean_revenue'].max():.2f}")
                 print(f"  - Avg mean revenue: {mean_df['mean_revenue'].mean():.2f}")
+
+                print(f"\nSample of mean revenue data:")
+                print(mean_df.head())
             
             # Create and save location mapping
             location_map = mean_df[['location', 'latitude', 'longitude']].copy()
+            if self.location_mapping_parquet_file.exists():
+                self.location_mapping_parquet_file.unlink()
+                if verbose:
+                    print(f"\nRemoved existing parquet file for location mapping.")
             location_map.to_parquet(self.location_mapping_parquet_file, index=False) 
             
             if verbose:
                 print(f"\nSaved location mapping to {self.location_mapping_parquet_file}")
                 print(f"  - Number of locations: {len(location_map)}")
+                print(f"\nSample of location mapping:")
+                print(location_map.head())
             
+            if (self.output_revenues_csv_dir / "mean_revenue.csv").exists():
+                (self.output_revenues_csv_dir / "mean_revenue.csv").unlink()
+                if verbose:
+                    print(f"\nRemoved existing CSV file for mean revenue.")
             mean_df.to_csv(self.output_revenues_csv_dir / "mean_revenue.csv", index=False)
+            
+            if (self.location_mapping_csv_file).exists():
+                self.location_mapping_csv_file.unlink()
+                if verbose:
+                    print(f"\nRemoved existing CSV file for location mapping.")
             location_map.to_csv(self.location_mapping_csv_file, index=False)
             
             if verbose:
