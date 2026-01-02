@@ -18,14 +18,10 @@ class EnergyComputing:
     Compute energy from weather data.
     """
 
-    def __init__(self, target: Literal["paths", "paths_local"], adjusted_height: bool = True):
+    def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
         self.input_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land" / "hourly"
-        self.input_100m_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather_100m" / "era5_land" / "hourly"
         self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy" / "era5_land" / "hourly"
-        self.output_100m_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy_100m" / "era5_land" / "hourly"
-        
-        self.adjusted_height = adjusted_height
 
     def compute_energy(self, turbine_model="GE_1.5MW", n_workers=None, verbose=True):
         """Compute energy from wind speed data using the specified turbine model."""
@@ -48,18 +44,7 @@ class EnergyComputing:
             print(f"Dashboard: {client.dashboard_link}")
         
         try:
-            if verbose:
-                if self.adjusted_height:
-                    print(f"Loading weather data at adjusted height from {self.input_100m_dir}...")
-                else:
-                    print(f"Loading weather data from {self.input_dir}...")
-            
-            if self.adjusted_height:
-                input_dir = self.input_100m_dir
-            else:
-                input_dir = self.input_dir
-            
-            ddf = dd.read_parquet(input_dir, engine="pyarrow")
+            ddf = dd.read_parquet(self.input_dir, engine="pyarrow")
 
             if verbose:
                 print(f"Computing energy using turbine model: {turbine_model}")
@@ -70,13 +55,8 @@ class EnergyComputing:
             
             ddf_energy = ddf[["lat_bin", "lon_bin", "valid_time", "latitude", "longitude"]].assign(mwh=mwh)
 
-            if self.adjusted_height:
-                output_dir = self.output_100m_dir
-            else:
-                output_dir = self.output_dir
-            
             ddf_energy.to_parquet(
-                output_dir,
+                self.output_dir,
                 engine="pyarrow",
                 compression="zstd",
                 write_index=False,

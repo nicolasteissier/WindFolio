@@ -14,26 +14,21 @@ class MeanRevenueComputer:
     Compute mean revenue per location from partitioned revenues data.
     """
 
-    def __init__(self, target: Literal["paths", "paths_local"], adjusted_height: bool = True):
+    def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
         self.input_revenues_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "hourly"
-        self.input_revenues_100m_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues_100m" / "hourly"
 
         self.output_revenues_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "mean"
         self.output_revenues_parquet_dir.mkdir(parents=True, exist_ok=True)
-        self.output_revenues_100m_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues_100m" / "mean"
-        self.output_revenues_100m_parquet_dir.mkdir(parents=True, exist_ok=True)
 
-        self.output_revenues_100m_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "revenues_100m" / "mean"
-        self.output_revenues_100m_csv_dir.mkdir(parents=True, exist_ok=True)
+        self.output_revenues_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "revenues" / "mean"
+        self.output_revenues_csv_dir.mkdir(parents=True, exist_ok=True)
 
         self.location_mapping_parquet_file = Path(self.config[target]['processed_data']) / "parquet" / "locations" / "location_mapping.parquet"
         self.location_mapping_parquet_file.parent.mkdir(parents=True, exist_ok=True)
 
         self.location_mapping_csv_file = Path(self.config[target]['processed_data']) / "csv" / "locations" / "location_mapping.csv"
         self.location_mapping_csv_file.parent.mkdir(parents=True, exist_ok=True)
-
-        self.adjusted_height = adjusted_height
 
 
     def compute_mean_revenue(self, n_workers=None, verbose=True):
@@ -63,16 +58,9 @@ class MeanRevenueComputer:
 
         try:
             if verbose:
-                if self.adjusted_height:
-                    print(f"\nLoading revenues data at adjusted height from {self.input_revenues_dir}...")
-                else:
-                    print(f"\nLoading revenues data from {self.input_revenues_dir}...")
+                print(f"\nLoading revenues data from {self.input_revenues_dir}...")
 
-            if self.adjusted_height:
-                meta = [f for f in self.input_revenues_100m_dir.rglob("*.parquet") if f.name.startswith("._")]
-            else:
-                meta = [f for f in self.input_revenues_dir.rglob("*.parquet") if f.name.startswith("._")]
-
+            meta = [f for f in self.input_revenues_dir.rglob("*.parquet") if f.name.startswith("._")]
             if verbose and len(meta) > 0:
                 print(f"\nFound {len(meta)} system files to remove.")
             iterator = tqdm(meta, desc="Removing system files") if verbose else meta
@@ -80,13 +68,8 @@ class MeanRevenueComputer:
                 meta_file.unlink()
 
             # Read parquet with explicit divisions to respect partitioning
-            if self.adjusted_height:
-                input_dir = self.input_revenues_100m_dir
-            else:
-                input_dir = self.input_revenues_dir
-            
             ddf_revenues = dd.read_parquet(
-                input_dir,
+                self.input_revenues_dir,
                 engine="pyarrow",
                 split_row_groups="infer",
                 aggregate_files="lon_bin",  # Use partitioning columns to aggregate files
@@ -164,11 +147,7 @@ class MeanRevenueComputer:
             mean_df = mean_df.sort_values('location').reset_index(drop=True)
             
             # Save mean revenue (including bins for reference)
-            if self.adjusted_height:
-                mean_revenue_path = self.output_revenues_100m_parquet_dir / "mean_revenue.parquet"
-            else:
-                mean_revenue_path = self.output_revenues_parquet_dir / "mean_revenue.parquet"
-
+            mean_revenue_path = self.output_revenues_parquet_dir / "mean_revenue.parquet"
             if mean_revenue_path.exists():
                 mean_revenue_path.unlink()
                 if verbose:
@@ -197,18 +176,12 @@ class MeanRevenueComputer:
                 print(f"  - Number of locations: {len(location_map)}")
                 print(f"\nSample of location mapping:")
                 print(location_map.head())
-            if self.adjusted_height:
-                if (self.output_revenues_100m_csv_dir / "mean_revenue.csv").exists():
-                    (self.output_revenues_100m_csv_dir / "mean_revenue.csv").unlink()
+            
+            if (self.output_revenues_csv_dir / "mean_revenue.csv").exists():
+                (self.output_revenues_csv_dir / "mean_revenue.csv").unlink()
                 if verbose:
                     print(f"\nRemoved existing CSV file for mean revenue.")
-                mean_df.to_csv(self.output_revenues_100m_csv_dir / "mean_revenue.csv", index=False)
-            else:
-                if (self.output_revenues_csv_dir / "mean_revenue.csv").exists():
-                    (self.output_revenues_csv_dir / "mean_revenue.csv").unlink()
-                if verbose:
-                    print(f"\nRemoved existing CSV file for mean revenue.")
-                mean_df.to_csv(self.output_revenues_csv_dir / "mean_revenue.csv", index=False)
+            mean_df.to_csv(self.output_revenues_csv_dir / "mean_revenue.csv", index=False)
             
             if (self.location_mapping_csv_file).exists():
                 self.location_mapping_csv_file.unlink()

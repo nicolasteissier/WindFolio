@@ -13,23 +13,16 @@ class CovarianceMatrixPivot:
     TODO: Adapt for time range limited cov matrix 
     """
 
-    def __init__(self, target: Literal["paths", "paths_local"], adjusted_height: bool = True):
+    def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
         self.input_csv = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix" / "covariance_matrix.csv"
-        self.input_100m_csv = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix_100m" / "covariance_matrix.csv"
 
         self.output_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "covariance_matrix"
         self.output_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix"
-        self.output_100m_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "covariance_matrix_100m"
-        self.output_100m_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix_100m"
         self.output_parquet_dir.mkdir(parents=True, exist_ok=True)
         self.output_csv_dir.mkdir(parents=True, exist_ok=True)
-        self.output_100m_parquet_dir.mkdir(parents=True, exist_ok=True)
-        self.output_100m_csv_dir.mkdir(parents=True, exist_ok=True)
 
         self.location_mapping_file = Path(self.config[target]['processed_data']) / "parquet" / "locations" / "location_mapping.parquet"
-        
-        self.adjusted_height = adjusted_height
 
     def pivot_covariance_matrix(self, chunksize=100000, verbose=True):
         """
@@ -40,33 +33,21 @@ class CovarianceMatrixPivot:
             verbose: Print progress information
         """
         
-        if self.adjusted_height:
-            input_csv = self.input_100m_csv
-            output_parquet_dir = self.output_100m_parquet_dir
-            output_csv_dir = self.output_100m_csv_dir
-        else:
-            input_csv = self.input_csv
-            output_parquet_dir = self.output_parquet_dir
-            output_csv_dir = self.output_csv_dir
-        
-        if not input_csv.exists():
+        if not self.input_csv.exists():
             raise FileNotFoundError(
-                f"Covariance matrix CSV not found at {input_csv}. "
+                f"Covariance matrix CSV not found at {self.input_csv}. "
                 f"Please run CovarianceMatrixComputer first."
             )
         
         if verbose:
-            if self.adjusted_height:
-                print(f"Loading covariance matrix from {input_csv} (adjusted height)")
-            else:
-                print(f"Loading covariance matrix from {input_csv}")
+            print(f"Loading covariance matrix from {self.input_csv}")
             print("This may take a while for large matrices...")
         
         if verbose:
             print("\nIdentifying unique locations...")
         
         locations = set()
-        for chunk in tqdm(pd.read_csv(input_csv, chunksize=chunksize), desc="Reading chunks", disable=not verbose):
+        for chunk in tqdm(pd.read_csv(self.input_csv, chunksize=chunksize), desc="Reading chunks", disable=not verbose):
             locations.update(chunk['col1'].unique())
             locations.update(chunk['col2'].unique())
         
@@ -85,7 +66,7 @@ class CovarianceMatrixPivot:
         if verbose:
             print("\nBuilding covariance matrix...")
         
-        for chunk in tqdm(pd.read_csv(input_csv, chunksize=chunksize),
+        for chunk in tqdm(pd.read_csv(self.input_csv, chunksize=chunksize),
                          desc="Processing chunks", disable=not verbose):
             for _, row in chunk.iterrows():
                 i = loc_to_idx[row['col1']]
@@ -109,14 +90,14 @@ class CovarianceMatrixPivot:
         
         if verbose:
             print("\nSaving wide-format covariance matrix...")
-        output_parquet = output_parquet_dir / "covariance_matrix_pivoted.parquet"
+        output_parquet = self.output_parquet_dir / "covariance_matrix_pivoted.parquet"
         cov_df.to_parquet(output_parquet)
         
         if verbose:
             print(f"\nSaved wide-format covariance matrix to {output_parquet}")
             print(f"Matrix shape: {cov_df.shape}")
         
-        output_csv = output_csv_dir / "covariance_matrix_pivoted.csv"
+        output_csv = self.output_csv_dir / "covariance_matrix_pivoted.csv"
         cov_df.to_csv(output_csv)
         if verbose:
             print(f"Saved CSV version to {output_csv}")
@@ -150,11 +131,7 @@ class CovarianceMatrixPivot:
         Returns:
             Pandas DataFrame with pivoted covariance matrix
         """
-        if self.adjusted_height:
-            output_parquet = self.output_100m_parquet_dir / "covariance_matrix_pivoted.parquet"
-        else:
-            output_parquet = self.output_parquet_dir / "covariance_matrix_pivoted.parquet"
-        
+        output_parquet = self.output_parquet_dir / "covariance_matrix_pivoted.parquet"
         if not output_parquet.exists():
             raise FileNotFoundError(
                 f"Pivoted covariance matrix not found at {output_parquet}. "
