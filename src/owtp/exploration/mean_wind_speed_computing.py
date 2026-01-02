@@ -66,7 +66,7 @@ class MeanWindSpeedComputer:
                 meta_file.unlink()
 
             # Get all parquet files
-            parquet_files = sorted([f for f in self.input_weather_dir.glob("*.parquet") if not f.name.startswith("._")])
+            parquet_files = sorted([f for f in self.input_weather_dir.rglob("*.parquet") if not f.name.startswith("._")])
             
             if verbose:
                 print(f"\nFound {len(parquet_files)} parquet files")
