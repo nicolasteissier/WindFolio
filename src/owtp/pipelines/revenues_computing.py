@@ -26,8 +26,8 @@ class RevenuesComputing:
 
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=1,
-            memory_limit='2GB',
+            threads_per_worker=4,
+            memory_limit='30GB',
             processes=True,
             dashboard_address=':8787'
         )
@@ -106,5 +106,5 @@ class RevenuesComputing:
 
     
 if __name__ == "__main__":
-    computer = RevenuesComputing(target="paths")
+    computer = RevenuesComputing(target="paths_local")
     computer.compute_revenues(verbose=True)

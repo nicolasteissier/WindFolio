@@ -148,7 +148,7 @@ class ERA5WeatherDataFetcher:
 
 
 if __name__ == "__main__":
-    fetcher = ERA5WeatherDataFetcher(target="paths")
+    fetcher = ERA5WeatherDataFetcher(target="paths_local")
     fetcher.fetch_weather_data(
         dataset='era5land', 
         target_zone="france", 

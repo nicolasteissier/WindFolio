@@ -162,7 +162,7 @@ class MeanVariancePortfolioOptimizer:
         # Constraints
         constraints = [
             weights >= 0,                      # No short selling (non-negative turbines)
-            cp.sum(weights) <= total_turbines  # Budget constraint
+            cp.sum(weights) == total_turbines  # Budget constraint
         ]
         
         # Optional: limit number of locations with turbines (sparsity)

@@ -23,7 +23,7 @@ class EnergyComputing:
         self.input_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land" / "hourly"
         self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy" / "era5_land" / "hourly"
 
-    def compute_energy(self, turbine_model="GE_1.5MW", n_workers=None, verbose=True):
+    def compute_energy(self, turbine_model="NREL_7MW", n_workers=None, verbose=True):
         """Compute energy from wind speed data using the specified turbine model."""
         
         if n_workers is None:
@@ -32,8 +32,8 @@ class EnergyComputing:
         # Distributed scheduler for performance monitoring and memory management
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=1,
-            memory_limit='2GB',
+            threads_per_worker=4,
+            memory_limit='20GB',
             processes=True,
             dashboard_address=':8787'
         )
@@ -119,4 +119,4 @@ class EnergyComputing:
     
 if __name__ == "__main__":
     computer = EnergyComputing(target="paths_local")
-    computer.compute_energy(turbine_model="GE_1.5MW", n_workers=4, verbose=True)
+    computer.compute_energy(turbine_model="NREL_7MW", verbose=True)

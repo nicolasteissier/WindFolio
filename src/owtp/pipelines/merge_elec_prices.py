@@ -65,5 +65,5 @@ class PriceMerger:
         merged.to_parquet(output_path)
 
 if __name__ == "__main__":
-    merger = PriceMerger(target="paths")
+    merger = PriceMerger(target="paths_local")
     merger.merge_prices()
