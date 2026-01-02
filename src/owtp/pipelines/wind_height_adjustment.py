@@ -27,11 +27,11 @@ class WindHeightAdjustment:
         self.ORIGINAL_HEIGHT = 10  # meters
         self.TARGET_HEIGHT = 100   # meters
 
-        self.real_alpha = False
+        self.use_real_z0 = False
         self.constant_alpha = 0.143  # 1/7th power law
 
     def adjust_wind_height(self, n_workers=None, verbose=True):
-        """Adjust wind heights from input weather data using alpha values."""
+        """Adjust wind heights from input weather data using alpha or z0 values."""
 
         if n_workers is None:
             n_workers = os.cpu_count() // 2 # type: ignore
@@ -61,9 +61,10 @@ class WindHeightAdjustment:
             if verbose:
                 print("Adjusting wind heights using alpha values.")
 
-            if self.real_alpha:
-                ddf_alpha = dd.read_parquet(self.input_alpha_dir, engine="pyarrow")
-                adjusted_wind_speed = wind_speed * (self.TARGET_HEIGHT / self.ORIGINAL_HEIGHT) ** ddf_alpha['alpha']
+            if self.use_real_z0:
+                ddf_z0 = dd.read_parquet(self.input_alpha_dir, engine="pyarrow")
+                # formula: ws_100m = ws_10m * (log(100 / z0) / log(10 / z0))
+                adjusted_wind_speed = wind_speed * (np.log(self.TARGET_HEIGHT / ddf_z0['z0']) / np.log(self.ORIGINAL_HEIGHT / ddf_z0['z0']))
             else:
                 # Use a constant alpha value if real alpha values are not available
                 adjusted_wind_speed = wind_speed * (self.TARGET_HEIGHT / self.ORIGINAL_HEIGHT) ** self.constant_alpha
