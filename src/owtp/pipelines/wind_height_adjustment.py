@@ -63,8 +63,9 @@ class WindHeightAdjustment:
 
             if self.use_real_z0:
                 ddf_z0 = dd.read_parquet(self.input_alpha_dir, engine="pyarrow")
-                # formula: ws_100m = ws_10m * (log(100 / z0) / log(10 / z0))
-                adjusted_wind_speed = wind_speed * (np.log(self.TARGET_HEIGHT / ddf_z0['z0']) / np.log(self.ORIGINAL_HEIGHT / ddf_z0['z0']))
+                # Join to have the z0 values aligned
+                ordered = ddf_weather.merge(ddf_z0, on=["lat_bin", "lon_bin", "valid_time", "latitude", "longitude"])
+                adjusted_wind_speed = wind_speed * (np.log(self.TARGET_HEIGHT / ordered['z0']) / np.log(self.ORIGINAL_HEIGHT / ordered['z0']))
             else:
                 # Use a constant alpha value if real alpha values are not available
                 adjusted_wind_speed = wind_speed * (self.TARGET_HEIGHT / self.ORIGINAL_HEIGHT) ** self.constant_alpha
