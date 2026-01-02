@@ -17,5 +17,5 @@ paths_local:
 rolling_calibrations:
   window_size: 1825 # in days
   step_size: 365 # in days
-  gap_size: 7 # in days
+  gap_size: 30 # in days
   eval_size: 365 # in days
