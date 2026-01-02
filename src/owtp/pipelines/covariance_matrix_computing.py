@@ -15,27 +15,41 @@ class CovarianceMatrixComputer:
     is treated as a separate variable/asset.
     """
 
-    def __init__(self, target: Literal["paths", "paths_local"]):
+    def __init__(self, target: Literal["paths", "paths_local"], adjusted_height: bool = True):
         self.config = owtp.config.load_yaml_config()
         self.input_revenues_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "hourly"
-        self.output_csv = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix.csv"
+        self.input_revenues_100m_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues_100m" / "hourly"
+        self.output_csv = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix" / "covariance_matrix.csv"
+        self.output_100m_csv = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix_100m" / "covariance_matrix.csv"
+        
+        self.adjusted_height = adjusted_height
 
     def compute_covariance_matrix(self, n_workers=None, verbose=True):
         """Compute covariance matrix of revenues across all locations."""
         
-        if self.output_csv.exists():
-            self.output_csv.unlink()
+        if self.adjusted_height:
+            self._active_output_csv = self.output_100m_csv
+            input_dir = self.input_revenues_100m_dir
+        else:
+            self._active_output_csv = self.output_csv
+            input_dir = self.input_revenues_dir
+        
+        if self._active_output_csv.exists():
+            self._active_output_csv.unlink()
 
-        self.output_csv.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(columns=["col1", "col2", "covariance"]).to_csv(self.output_csv, index=False)
+        self._active_output_csv.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(columns=["col1", "col2", "covariance"]).to_csv(self._active_output_csv, index=False)
 
         if n_workers is None:
             n_workers = os.cpu_count() // 2 # type: ignore
         
-        bins = set(self.input_revenues_dir.glob("lat_bin=*/lon_bin=*"))
+        bins = set(input_dir.glob("lat_bin=*/lon_bin=*"))
 
         if verbose:
-            print("Processing partitions one by one")
+            if self.adjusted_height:
+                print(f"Processing partitions from {input_dir} (adjusted height)")
+            else:
+                print(f"Processing partitions from {input_dir}")
 
         process_map(
             self._handle_single_partition,
@@ -80,7 +94,7 @@ class CovarianceMatrixComputer:
         # Keep only upper triangle (including diagonal) to avoid duplicates in symmetric matrix
         cov_melted = cov_melted[cov_melted["col1"] <= cov_melted["col2"]]
         
-        cov_melted.to_csv(self.output_csv, mode="a", header=False, index=False)
+        cov_melted.to_csv(self._active_output_csv, mode="a", header=False, index=False)
 
     def _handle_partition_pairs(self, file_path1: Path, file_path2: Path) -> None:
         """Load two partitions of revenues data and compute cross-covariance."""
@@ -108,7 +122,7 @@ class CovarianceMatrixComputer:
 
         # Melt to long format and append to CSV
         cov_melted = cov_matrix.reset_index(names="col1").melt(id_vars="col1", var_name="col2", value_name="covariance")
-        cov_melted.to_csv(self.output_csv, mode="a", header=False, index=False)
+        cov_melted.to_csv(self._active_output_csv, mode="a", header=False, index=False)
 
     def _pivot_and_clean(self, df: pd.DataFrame) -> pd.DataFrame:
         """Pivot the revenues DataFrame and clean invalid columns."""

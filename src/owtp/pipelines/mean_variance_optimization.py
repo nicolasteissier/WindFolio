@@ -11,19 +11,28 @@ class MeanVariancePortfolioOptimizer:
     Mean-variance portfolio optimization for wind farm locations.
     """
 
-    def __init__(self, target: Literal["paths", "paths_local"] = "paths_local"):
+    def __init__(self, target: Literal["paths", "paths_local"] = "paths_local", adjusted_height: bool = True):
         self.config = owtp.config.load_yaml_config()
         
         self.mean_revenue_path = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "mean" / "mean_revenue.parquet"
+        self.mean_revenue_100m_path = Path(self.config[target]['processed_data']) / "parquet" / "revenues_100m" / "mean" / "mean_revenue.parquet"
+        
         self.covariance_csv_path = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix" / "covariance_matrix_pivoted.csv"
         self.covariance_parquet_path = Path(self.config[target]['processed_data']) / "parquet" / "covariance_matrix" / "covariance_matrix_pivoted.parquet"
+        self.covariance_100m_csv_path = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix_100m" / "covariance_matrix_pivoted.csv"
+        self.covariance_100m_parquet_path = Path(self.config[target]['processed_data']) / "parquet" / "covariance_matrix_100m" / "covariance_matrix_pivoted.parquet"
         
         self.output_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "portfolio_weights"
         self.output_parquet_dir.mkdir(parents=True, exist_ok=True)
+        self.output_100m_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "portfolio_weights_100m"
+        self.output_100m_parquet_dir.mkdir(parents=True, exist_ok=True)
         
         self.output_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "portfolio_weights"
         self.output_csv_dir.mkdir(parents=True, exist_ok=True)
+        self.output_100m_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "portfolio_weights_100m"
+        self.output_100m_csv_dir.mkdir(parents=True, exist_ok=True)
         
+        self.adjusted_height = adjusted_height
         self.mean_revenue_df = None
         self.covariance_matrix = None
         self.location_to_idx = None
@@ -32,10 +41,22 @@ class MeanVariancePortfolioOptimizer:
     def load_data(self, verbose=True):
         """Load mean revenues and covariance matrix."""
         
-        if verbose:
-            print(f"Loading mean revenues from {self.mean_revenue_path}...")
+        if self.adjusted_height:
+            mean_revenue_path = self.mean_revenue_100m_path
+            covariance_parquet_path = self.covariance_100m_parquet_path
+            covariance_csv_path = self.covariance_100m_csv_path
+        else:
+            mean_revenue_path = self.mean_revenue_path
+            covariance_parquet_path = self.covariance_parquet_path
+            covariance_csv_path = self.covariance_csv_path
         
-        self.mean_revenue_df = pd.read_parquet(self.mean_revenue_path)
+        if verbose:
+            if self.adjusted_height:
+                print(f"Loading mean revenues from {mean_revenue_path} (adjusted height)...")
+            else:
+                print(f"Loading mean revenues from {mean_revenue_path}...")
+        
+        self.mean_revenue_df = pd.read_parquet(mean_revenue_path)
         
         self.location_to_idx = {loc: idx for idx, loc in enumerate(self.mean_revenue_df['location'])}
         self.idx_to_location = {idx: loc for loc, idx in self.location_to_idx.items()}
@@ -43,16 +64,16 @@ class MeanVariancePortfolioOptimizer:
         if verbose:
             print(f"\nLoading covariance matrix...")
         
-        if self.covariance_parquet_path.exists():
-            cov_df = pd.read_parquet(self.covariance_parquet_path)
+        if covariance_parquet_path.exists():
+            cov_df = pd.read_parquet(covariance_parquet_path)
             if verbose:
                 print(f"Loaded pivoted covariance matrix from parquet")
-        elif self.covariance_csv_path.exists():
-            cov_df = pd.read_csv(self.covariance_csv_path, index_col=0)
+        elif covariance_csv_path.exists():
+            cov_df = pd.read_csv(covariance_csv_path, index_col=0)
             if verbose:
                 print(f"Loaded pivoted covariance matrix from CSV")
         else:
-            raise FileNotFoundError(f"Pivoted covariance matrix not found at {self.covariance_parquet_path} or {self.covariance_csv_path}")
+            raise FileNotFoundError(f"Pivoted covariance matrix not found at {covariance_parquet_path} or {covariance_csv_path}")
         
         # Align covariance matrix with mean revenue locations
         locations_revenue = self.mean_revenue_df['location'].tolist()
@@ -233,10 +254,14 @@ class MeanVariancePortfolioOptimizer:
     def save_weights(self, weights_continuous, weights_integer, results, suffix="", verbose=True):
         """Save portfolio weights to disk."""
 
-
-        output_parquet_dir = self.output_parquet_dir / suffix
+        if self.adjusted_height:
+            output_parquet_dir = self.output_100m_parquet_dir / suffix
+            output_csv_dir = self.output_100m_csv_dir / suffix
+        else:
+            output_parquet_dir = self.output_parquet_dir / suffix
+            output_csv_dir = self.output_csv_dir / suffix
+        
         output_parquet_dir.mkdir(parents=True, exist_ok=True)
-        output_csv_dir = self.output_csv_dir / suffix
         output_csv_dir.mkdir(parents=True, exist_ok=True)
         
         weights_df = self.mean_revenue_df[['location', 'latitude', 'longitude', 'mean_revenue']].copy()
@@ -281,7 +306,7 @@ if __name__ == "__main__":
 
     # PARAMETERS
     total_turbines = 100
-    lambda_risk = 1e-4
+    lambda_risk = 4.5e-4
     min_revenue_threshold = 10.0  # EUR/hour
     max_locations = None
     

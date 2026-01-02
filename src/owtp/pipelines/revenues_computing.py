@@ -12,11 +12,15 @@ class RevenuesComputing:
     Compute revenues from energy and prices data using Dask.
     """
 
-    def __init__(self, target: Literal["paths", "paths_local"]):
+    def __init__(self, target: Literal["paths", "paths_local"], adjusted_height: bool = True):
         self.config = owtp.config.load_yaml_config()
         self.input_energy_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy" / "era5_land" / "hourly"
+        self.input_energy_100m_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy_100m" / "era5_land" / "hourly"
         self.input_prices_dir = Path(self.config[target]['processed_data']) / "parquet" / "prices" / str("hourly")
         self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / str("hourly")
+        self.output_100m_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues_100m" / str("hourly")
+        
+        self.adjusted_height = adjusted_height
 
     def compute_revenues(self, n_workers=None, verbose=True):
         """Compute revenues from energy and prices data"""
@@ -39,8 +43,17 @@ class RevenuesComputing:
 
         try:
             if verbose:
-                print("Loading energy data...")
-            ddf_energy = dd.read_parquet(self.input_energy_dir, engine="pyarrow")
+                if self.adjusted_height:
+                    print(f"Loading energy data at adjusted height from {self.input_energy_100m_dir}...")
+                else:
+                    print(f"Loading energy data from {self.input_energy_dir}...")
+            
+            if self.adjusted_height:
+                input_dir = self.input_energy_100m_dir
+            else:
+                input_dir = self.input_energy_dir
+            
+            ddf_energy = dd.read_parquet(input_dir, engine="pyarrow")
             
             if verbose:
                 print("Loading prices data...")
@@ -88,9 +101,14 @@ class RevenuesComputing:
                 print("Writing revenues to Parquet...")
             
             # Write to Parquet (partitioned if possible)
-            self.output_dir.mkdir(parents=True, exist_ok=True)
+            if self.adjusted_height:
+                output_dir = self.output_100m_dir
+            else:
+                output_dir = self.output_dir
+            
+            output_dir.mkdir(parents=True, exist_ok=True)
             ddf_revenues.to_parquet(
-                self.output_dir,
+                output_dir,
                 engine="pyarrow",
                 compression="zstd",
                 write_index=False,

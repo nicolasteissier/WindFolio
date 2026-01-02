@@ -14,15 +14,22 @@ class MeanEnergyComputer:
     Compute mean energy per location from partitioned energy data.
     """
 
-    def __init__(self, target: Literal["paths", "paths_local"]):
+    def __init__(self, target: Literal["paths", "paths_local"], adjusted_height: bool = True):
         self.config = owtp.config.load_yaml_config()
         self.input_energy_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy" / "era5_land" / "hourly"
+        self.input_energy_100m_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy_100m" / "era5_land" / "hourly"
 
         self.output_energy_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy" / "mean"
         self.output_energy_parquet_dir.mkdir(parents=True, exist_ok=True)
+        self.output_energy_100m_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy_100m" / "mean"
+        self.output_energy_100m_parquet_dir.mkdir(parents=True, exist_ok=True)
 
         self.output_energy_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "energy" / "mean"
         self.output_energy_csv_dir.mkdir(parents=True, exist_ok=True)
+        self.output_energy_100m_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "energy_100m" / "mean"
+        self.output_energy_100m_csv_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.adjusted_height = adjusted_height
 
 
     def compute_mean_energy(self, n_workers=None, verbose=True):
@@ -52,9 +59,17 @@ class MeanEnergyComputer:
 
         try:
             if verbose:
-                print(f"\nLoading energy data from {self.input_energy_dir}...")
+                if self.adjusted_height:
+                    print(f"\nLoading energy data at adjusted height from {self.input_energy_100m_dir}...")
+                else:
+                    print(f"\nLoading energy data from {self.input_energy_dir}...")
 
-            meta = [f for f in self.input_energy_dir.rglob("*.parquet") if f.name.startswith("._")]
+            if self.adjusted_height:
+                input_dir = self.input_energy_100m_dir
+            else:
+                input_dir = self.input_energy_dir
+
+            meta = [f for f in input_dir.rglob("*.parquet") if f.name.startswith("._")]
             if verbose and len(meta) > 0:
                 print(f"\nFound {len(meta)} system files to remove.")
             iterator = tqdm(meta, desc="Removing system files") if verbose else meta
@@ -63,7 +78,7 @@ class MeanEnergyComputer:
 
             # Read parquet with explicit divisions to respect partitioning
             ddf_energy = dd.read_parquet(
-                self.input_energy_dir,
+                input_dir,
                 engine="pyarrow",
                 split_row_groups="infer",
                 aggregate_files="lon_bin",  # Use partitioning columns to aggregate files
@@ -141,7 +156,11 @@ class MeanEnergyComputer:
             mean_df = mean_df.sort_values('location').reset_index(drop=True)
             
             # Save mean energy (including bins for reference)
-            mean_energy_path = self.output_energy_parquet_dir / "mean_energy.parquet"
+            if self.adjusted_height:
+                mean_energy_path = self.output_energy_100m_parquet_dir / "mean_energy.parquet"
+            else:
+                mean_energy_path = self.output_energy_parquet_dir / "mean_energy.parquet"
+            
             mean_df.to_parquet(mean_energy_path, index=False)
             
             if verbose:
@@ -150,7 +169,10 @@ class MeanEnergyComputer:
                 print(f"  - Max mean energy: {mean_df['mean_energy'].max():.4f} MWh")
                 print(f"  - Avg mean energy: {mean_df['mean_energy'].mean():.4f} MWh")
             
-            mean_df.to_csv(self.output_energy_csv_dir / "mean_energy.csv", index=False)
+            if self.adjusted_height:
+                mean_df.to_csv(self.output_energy_100m_csv_dir / "mean_energy.csv", index=False)
+            else:
+                mean_df.to_csv(self.output_energy_csv_dir / "mean_energy.csv", index=False)
             
             if verbose:
                 print("\nMean energy also saved as CSV.")

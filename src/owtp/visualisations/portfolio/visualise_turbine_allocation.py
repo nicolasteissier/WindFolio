@@ -136,4 +136,4 @@ def plot_turbine_allocation(
 
 
 if __name__ == "__main__":
-    plot_turbine_allocation(target="paths_local", suffix="_(100)_(0.0001)_(10.0)")
+    plot_turbine_allocation(target="paths_local", suffix="_(100)_(1e-05)_(10.0)")

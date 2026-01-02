@@ -274,8 +274,8 @@ class Era5WeatherDataPreprocessor:
         # Distributed scheduler for performance monitoring and memory management
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=1,
-            memory_limit='2GB',
+            threads_per_worker=4,
+            memory_limit='30GB',
             processes=True,
             dashboard_address=':8787'
         )
