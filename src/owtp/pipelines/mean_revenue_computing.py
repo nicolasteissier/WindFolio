@@ -8,6 +8,7 @@ import numpy as np
 import os
 from tqdm import tqdm
 
+from owtp.others import rolling
 
 class MeanRevenueComputer:
     """
@@ -21,15 +22,8 @@ class MeanRevenueComputer:
         self.output_revenues_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "mean"
         self.output_revenues_parquet_dir.mkdir(parents=True, exist_ok=True)
 
-        self.output_revenues_csv_dir = Path(self.config[target]['processed_data']) / "csv" / "revenues" / "mean"
-        self.output_revenues_csv_dir.mkdir(parents=True, exist_ok=True)
-
-        self.location_mapping_parquet_file = Path(self.config[target]['processed_data']) / "parquet" / "locations" / "location_mapping.parquet"
-        self.location_mapping_parquet_file.parent.mkdir(parents=True, exist_ok=True)
-
-        self.location_mapping_csv_file = Path(self.config[target]['processed_data']) / "csv" / "locations" / "location_mapping.csv"
-        self.location_mapping_csv_file.parent.mkdir(parents=True, exist_ok=True)
-
+        self.location_mapping_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "locations"
+        self.location_mapping_parquet_dir.mkdir(parents=True, exist_ok=True)
 
     def compute_mean_revenue(self, n_workers=None, verbose=True):
         """
@@ -41,7 +35,7 @@ class MeanRevenueComputer:
         """
         
         if n_workers is None:
-            n_workers = os.cpu_count() // 2
+            n_workers = os.cpu_count() // 2 # type: ignore
 
         cluster = LocalCluster(
             n_workers=n_workers,
@@ -98,99 +92,90 @@ class MeanRevenueComputer:
             if verbose and not has_partitioning:
                 raise ValueError("Partitioning columns 'lat_bin' and 'lon_bin' not found in revenue data.")
             
-            # Process each partition independently
-            def compute_partition_mean(partition_df):
-                """
-                Compute mean revenue for all locations within a partition.
-                This function operates on a single partition (pandas DataFrame).
-                """
-                # Group by exact location within this partition
-                mean_by_location = partition_df.groupby(['latitude', 'longitude']).agg(
-                    mean_revenue=('revenue', 'mean'),
-                    lat_bin=('lat_bin', 'first'),
-                    lon_bin=('lon_bin', 'first')
-                ).reset_index()
+            for window in rolling.get_windows(
+                ddf_revenues['time'].min().compute(),
+                ddf_revenues['time'].max().compute()
+                ):
+                # Process each partition independently
+                def compute_partition_mean(partition_df, window_start, window_end):
+                    """
+                    Compute mean revenue for all locations within a partition.
+                    This function operates on a single partition (pandas DataFrame).
+                    """
+                    mask = (partition_df['time'] >= window_start) & (partition_df['time'] <= window_end)
+                    # Group by exact location within this partition
+                    mean_by_location = partition_df.loc[mask].groupby(['latitude', 'longitude']).agg(
+                        mean_revenue=('revenue', 'mean'),
+                        lat_bin=('lat_bin', 'first'),
+                        lon_bin=('lon_bin', 'first')
+                    ).reset_index()
+                    
+                    return mean_by_location
                 
-                return mean_by_location
-            
-            # Define output metadata
-            meta_df = {
-                'latitude': np.float64,
-                'longitude': np.float64,
-                'mean_revenue': np.float64,
-                'lat_bin': np.int64,
-                'lon_bin': np.int64
-            }
+                # Define output metadata
+                meta_df = {
+                    'latitude': np.float64,
+                    'longitude': np.float64,
+                    'mean_revenue': np.float64,
+                    'lat_bin': np.int64,
+                    'lon_bin': np.int64
+                }
 
-            # Apply to all partitions
-            ddf_means = ddf_revenues.map_partitions(
-                compute_partition_mean,
-                meta=meta_df
-            )
+                # Apply to all partitions
+                ddf_means = ddf_revenues.map_partitions(
+                    compute_partition_mean,
+                    window_start=window["train_window_start"],
+                    window_end=window["train_window_end"],
+                    meta=meta_df
+                )
 
-            if verbose:
-                print("\nCollecting results from all partitions...")
-            
-            # Compute and collect all partition means
-            mean_df = ddf_means.compute()
-            
-            if verbose:
-                print(f"\nComputed mean revenue for {len(mean_df)} locations")
-            
-            # Add location identifier
-            mean_df['location'] = mean_df['latitude'].astype(str) + '_' + mean_df['longitude'].astype(str)
-            
-            # Reorder columns
-            mean_df = mean_df[['location', 'latitude', 'longitude', 'mean_revenue', 'lat_bin', 'lon_bin']]
-            
-            # Sort by location for consistency
-            mean_df = mean_df.sort_values('location').reset_index(drop=True)
-            
-            # Save mean revenue (including bins for reference)
-            mean_revenue_path = self.output_revenues_parquet_dir / "mean_revenue.parquet"
-            if mean_revenue_path.exists():
-                mean_revenue_path.unlink()
                 if verbose:
-                    print(f"\nRemoved existing parquet file for mean revenue.")
-            mean_df.to_parquet(mean_revenue_path, index=False)
-            
-            if verbose:
-                print(f"\nSaved mean revenue to {mean_revenue_path}")
-                print(f"  - Min mean revenue: {mean_df['mean_revenue'].min():.2f}")
-                print(f"  - Max mean revenue: {mean_df['mean_revenue'].max():.2f}")
-                print(f"  - Avg mean revenue: {mean_df['mean_revenue'].mean():.2f}")
+                    print("\nCollecting results from all partitions...")
+                
+                # Compute and collect all partition means
+                mean_df = ddf_means.compute()
+                
+                if verbose:
+                    print(f"\nComputed mean revenue for {len(mean_df)} locations")
+                
+                # Add location identifier
+                mean_df['location'] = mean_df['latitude'].astype(str) + '_' + mean_df['longitude'].astype(str)
+                
+                # Reorder columns
+                mean_df = mean_df[['location', 'latitude', 'longitude', 'mean_revenue', 'lat_bin', 'lon_bin']]
+                
+                # Sort by location for consistency
+                mean_df = mean_df.sort_values('location').reset_index(drop=True)
+                
+                # Save mean revenue (including bins for reference)
+                mean_revenue_path = self.output_revenues_parquet_dir / f"{rolling.format_window_str(window['train_window_start'], window['train_window_end'])}.parquet"
+                if mean_revenue_path.exists():
+                    mean_revenue_path.unlink()
+                    if verbose:
+                        print(f"\nRemoved existing parquet file for mean revenue.")
+                mean_df.to_parquet(mean_revenue_path, index=False)
+                
+                if verbose:
+                    print(f"\nSaved mean revenue to {mean_revenue_path}")
+                    print(f"  - Min mean revenue: {mean_df['mean_revenue'].min():.2f}")
+                    print(f"  - Max mean revenue: {mean_df['mean_revenue'].max():.2f}")
+                    print(f"  - Avg mean revenue: {mean_df['mean_revenue'].mean():.2f}")
 
-                print(f"\nSample of mean revenue data:")
-                print(mean_df.head())
-            
-            # Create and save location mapping
-            location_map = mean_df[['location', 'latitude', 'longitude']].copy()
-            if self.location_mapping_parquet_file.exists():
-                self.location_mapping_parquet_file.unlink()
+                    print(f"\nSample of mean revenue data:")
+                    print(mean_df.head())
+                
+                # Create and save location mapping
+                location_map = mean_df[['location', 'latitude', 'longitude']].copy()
+                if len(list(self.location_mapping_parquet_dir.glob("*.parquet"))) > 0:
+                    for existing_file in self.location_mapping_parquet_dir.glob("*.parquet"):
+                        existing_file.unlink()
+                location_map.to_parquet(self.location_mapping_parquet_dir / f"location_mapping_{rolling.format_window_str(window['train_window_start'], window['train_window_end'])}.parquet", index=False)
+                
                 if verbose:
-                    print(f"\nRemoved existing parquet file for location mapping.")
-            location_map.to_parquet(self.location_mapping_parquet_file, index=False) 
-            
-            if verbose:
-                print(f"\nSaved location mapping to {self.location_mapping_parquet_file}")
-                print(f"  - Number of locations: {len(location_map)}")
-                print(f"\nSample of location mapping:")
-                print(location_map.head())
-            
-            if (self.output_revenues_csv_dir / "mean_revenue.csv").exists():
-                (self.output_revenues_csv_dir / "mean_revenue.csv").unlink()
-                if verbose:
-                    print(f"\nRemoved existing CSV file for mean revenue.")
-            mean_df.to_csv(self.output_revenues_csv_dir / "mean_revenue.csv", index=False)
-            
-            if (self.location_mapping_csv_file).exists():
-                self.location_mapping_csv_file.unlink()
-                if verbose:
-                    print(f"\nRemoved existing CSV file for location mapping.")
-            location_map.to_csv(self.location_mapping_csv_file, index=False)
-            
-            if verbose:
-                print("\nMean revenue and location mapping also saved as CSV.")
+                    print(f"\nSaved location mapping for {len(location_map)} locations")
+                    print(f"  - Number of locations: {len(location_map)}")
+                    print(f"\nSample of location mapping:")
+                    print(location_map.head())
                 
         finally:
             client.close()

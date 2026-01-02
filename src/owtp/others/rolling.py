@@ -29,3 +29,7 @@ def get_windows(start, end):
         current_start += pd.Timedelta(days=step_size)
 
     return windows
+
+def format_window_str(start: pd.Timestamp, end: pd.Timestamp) -> str:
+    """Format window start and end times into a string."""
+    return f"{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}"

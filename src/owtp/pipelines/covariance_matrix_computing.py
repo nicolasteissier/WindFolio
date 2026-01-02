@@ -6,6 +6,7 @@ import pandas as pd
 import itertools
 import os
 
+from owtp.others import rolling
 
 class CovarianceMatrixComputer:
     """
@@ -18,16 +19,13 @@ class CovarianceMatrixComputer:
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
         self.input_revenues_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "hourly"
-        self.output_csv = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix.csv"
+        self.output_dir = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix_long"
 
     def compute_covariance_matrix(self, n_workers=None, verbose=True):
         """Compute covariance matrix of revenues across all locations."""
         
-        if self.output_csv.exists():
-            self.output_csv.unlink()
-
-        self.output_csv.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(columns=["col1", "col2", "covariance"]).to_csv(self.output_csv, index=False)
+        for output_csv in self.output_dir.glob("*.csv"):
+            output_csv.unlink()
 
         if n_workers is None:
             n_workers = os.cpu_count() // 2 # type: ignore
@@ -37,9 +35,23 @@ class CovarianceMatrixComputer:
         if verbose:
             print("Processing partitions one by one")
 
+        # We get the min and max date from a single bin as they should all be complete regarding time
+        sample = pd.read_parquet(next(iter(bins)))
+        date_min, date_max = sample['time'].min(), sample['time'].max()
+        windows = rolling.get_windows(date_min, date_max)
+
+        # Create file headers
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        for window in windows:
+            start = window["train_window_start"]
+            end = window["train_window_end"]
+            output_csv = self.output_dir / f"{rolling.format_window_str(start, end)}.csv"
+            pd.DataFrame(columns=["col1", "col2", "covariance"]).to_csv(output_csv, index=False)
+
         process_map(
             self._handle_single_partition,
             bins,
+            [windows]*len(bins),
             max_workers=n_workers,
             chunksize=1,
             desc="Processing partitions",
@@ -55,12 +67,13 @@ class CovarianceMatrixComputer:
         process_map(
             self._handle_partition_pairs,
             *zip(*partition_pairs),
+            [windows]*len(bin_list),
             max_workers=n_workers,
             chunksize=1,
             desc="Processing partition pairs",
         )
 
-    def _handle_single_partition(self, file_path: Path) -> None:
+    def _handle_single_partition(self, file_path: Path, windows: list[dict]) -> None:
         """Load a single partition of revenues data."""
         path = Path(file_path)
 
@@ -72,17 +85,23 @@ class CovarianceMatrixComputer:
         if pivoted.shape[1] == 0:
             print(f"No valid columns in partition {file_path}, skipping.")
             return
-        
-        # Compute covariance matrix, melt to long format (col1, col2, covariance), and append to CSV
-        cov = pivoted.cov()
-        cov_melted = cov.reset_index(names="col1").melt(id_vars="col1", var_name="col2", value_name="covariance")
-        
-        # Keep only upper triangle (including diagonal) to avoid duplicates in symmetric matrix
-        cov_melted = cov_melted[cov_melted["col1"] <= cov_melted["col2"]]
-        
-        cov_melted.to_csv(self.output_csv, mode="a", header=False, index=False)
+            
+        for window in windows:
+            start = window["train_window_start"]
+            end = window["train_window_end"]
 
-    def _handle_partition_pairs(self, file_path1: Path, file_path2: Path) -> None:
+            windowed = pivoted.loc[(pivoted.index >= start) & (pivoted.index <= end)]
+            # Compute covariance matrix, melt to long format (col1, col2, covariance), and append to CSV
+            cov = windowed.cov()
+            cov_melted = cov.reset_index(names="col1").melt(id_vars="col1", var_name="col2", value_name="covariance")
+            
+            # Keep only upper triangle (including diagonal) to avoid duplicates in symmetric matrix
+            cov_melted = cov_melted[cov_melted["col1"] <= cov_melted["col2"]]
+            
+            output_file = self.output_dir / f"{rolling.format_window_str(start, end)}.csv"
+            cov_melted.to_csv(output_file, mode="a", header=False, index=False)
+
+    def _handle_partition_pairs(self, file_path1: Path, file_path2: Path, windows: list[dict]) -> None:
         """Load two partitions of revenues data and compute cross-covariance."""
         path1 = Path(file_path1)
         path2 = Path(file_path2)
@@ -101,14 +120,23 @@ class CovarianceMatrixComputer:
         if pivoted1.shape[0] != pivoted2.shape[0]:
             raise ValueError(f"Partitions {file_path1} and {file_path2} have different number of time points.")
 
-        combined = pd.concat([pivoted1, pivoted2], axis=1)
+        for window in windows:
+            start = window["train_window_start"]
+            end = window["train_window_end"]
 
-        # Compute cross-covariance matrix
-        cov_matrix = combined.cov().loc[pivoted1.columns, pivoted2.columns]
+            windowed1 = pivoted1.loc[(pivoted1.index >= start) & (pivoted1.index <= end)]
+            windowed2 = pivoted2.loc[(pivoted2.index >= start) & (pivoted2.index <= end)]
 
-        # Melt to long format and append to CSV
-        cov_melted = cov_matrix.reset_index(names="col1").melt(id_vars="col1", var_name="col2", value_name="covariance")
-        cov_melted.to_csv(self.output_csv, mode="a", header=False, index=False)
+            combined = pd.concat([windowed1, windowed2], axis=1)
+
+            # Compute cross-covariance matrix
+            cov_matrix = combined.cov().loc[windowed1.columns, windowed2.columns]
+
+            # Melt to long format and append to CSV
+            cov_melted = cov_matrix.reset_index(names="col1").melt(id_vars="col1", var_name="col2", value_name="covariance")
+            
+            output_file = self.output_dir / f"{rolling.format_window_str(start, end)}.csv"
+            cov_melted.to_csv(output_file, mode="a", header=False, index=False)
 
     def _pivot_and_clean(self, df: pd.DataFrame) -> pd.DataFrame:
         """Pivot the revenues DataFrame and clean invalid columns."""
