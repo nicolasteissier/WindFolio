@@ -13,3 +13,9 @@ paths_local:
   results_data: data/results/
   visualisations: reports/figures/
   masks: data/masks/
+
+rolling_calibrations:
+  window_size: 1825 # in days
+  step_size: 365 # in days
+  gap_size: 7 # in days
+  eval_size: 365 # in days
