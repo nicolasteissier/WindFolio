@@ -21,13 +21,13 @@ class WindHeightAdjustment:
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
         self.input_weather_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land" / "hourly"
-        self.input_alpha_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land" / "hourly_alpha"
-        self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land_100m" / "hourly"
+        self.input_z0_dir = Path(self.config[target]['processed_data']) / "roughness" / "era5" / "hourly" / "roughness.parquet"
+        self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather_height_adjusted" / "era5_land" / "hourly"
 
         self.ORIGINAL_HEIGHT = 10  # meters
         self.TARGET_HEIGHT = 100   # meters
 
-        self.use_real_z0 = False
+        self.use_real_z0 = True
         self.constant_alpha = 0.143  # 1/7th power law
 
     def adjust_wind_height(self, n_workers=None, verbose=True):
@@ -39,8 +39,8 @@ class WindHeightAdjustment:
         # Distributed scheduler for performance monitoring and memory management
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=1,
-            memory_limit='2GB',
+            threads_per_worker=2,
+            memory_limit='30GB',
             processes=True,
             dashboard_address=':8787'
         )
@@ -51,26 +51,67 @@ class WindHeightAdjustment:
             print(f"Dashboard: {client.dashboard_link}")
 
         try:
-            ddf_weather = dd.read_parquet(self.input_weather_dir, engine="pyarrow")
+            ddf_weather = dd.read_parquet(
+                self.input_weather_dir, 
+                engine="pyarrow",
+                split_row_groups="infer",
+                aggregate_files="lon_bin",
+                calculate_divisions=False
+            )
 
             if verbose:
                 print("Computing wind speed.")
 
-            wind_speed = np.sqrt(np.pow(ddf_weather['u10'], 2) + np.pow(ddf_weather['v10'], 2))
-
             if verbose:
-                print("Adjusting wind heights using alpha values.")
+                print("Adjusting wind heights using terrain roughness values.")
 
-            if self.use_real_z0:
-                ddf_z0 = dd.read_parquet(self.input_alpha_dir, engine="pyarrow")
-                # Join to have the z0 values aligned
-                ordered = ddf_weather.merge(ddf_z0, on=["lat_bin", "lon_bin", "valid_time", "latitude", "longitude"], how="left")
-                adjusted_wind_speed = wind_speed * (np.log(self.TARGET_HEIGHT / ordered['z0']) / np.log(self.ORIGINAL_HEIGHT / ordered['z0']))
-            else:
-                # Use a constant alpha value if real alpha values are not available
-                adjusted_wind_speed = wind_speed * (self.TARGET_HEIGHT / self.ORIGINAL_HEIGHT) ** self.constant_alpha
+            ddf_z0 = dd.read_parquet(self.input_z0_dir, engine="pyarrow")
+            ddf_z0 = ddf_z0.repartition(npartitions=1)
 
-            ddf_adjusted = ddf_weather[["lat_bin", "lon_bin", "valid_time", "latitude", "longitude"]].assign(ws_100m=adjusted_wind_speed)
+            def merge_partition(partition_df, z0_df):
+                """
+                Merge function to add z0 values to the weather data partition.
+                """
+                # Convert z0_df to pandas if it's still a Dask object
+                if isinstance(z0_df, dd.DataFrame):
+                    z0_df = z0_df.compute()
+                
+                # Merge with z0 values
+                ordered = partition_df.merge(z0_df, on=["latitude", "longitude"], how="left")
+                
+                # Calculate wind speed as a pandas Series
+                wind_speed = np.sqrt(ordered['u10']**2 + ordered['v10']**2)
+                
+                # Calculate adjustment factor using log law
+                log_ratio = np.log(self.TARGET_HEIGHT / ordered['fsr']) / np.log(self.ORIGINAL_HEIGHT / ordered['fsr'])
+                adjusted_wind_speed = wind_speed * log_ratio
+                
+                # Return DataFrame with required columns
+                return ordered[["valid_time", "latitude", "longitude", "lat_bin", "lon_bin"]].assign(ws=adjusted_wind_speed)
+
+            
+            # Define output metadata
+            meta_df = {
+                'valid_time': 'datetime64[ns]',
+                'latitude': 'f8',  # float64
+                'longitude': 'f8',
+                'lat_bin': 'category',   # int64
+                'lon_bin': 'category',
+                'ws': 'f8'
+            }
+            
+            # Compute z0 once as pandas DataFrame
+            z0_df = ddf_z0.compute()
+
+            # Apply to all partitions
+            ddf_adjusted = ddf_weather.map_partitions(
+                merge_partition,
+                z0_df=z0_df,  # Pass pandas DataFrame instead of Dask DataFrame
+                meta=meta_df
+            )
+
+
+            self.output_dir.mkdir(parents=True, exist_ok=True)
 
             ddf_adjusted.to_parquet(
                 self.output_dir,
@@ -90,3 +131,5 @@ class WindHeightAdjustment:
 if __name__ == "__main__":
     adjuster = WindHeightAdjustment(target="paths_local")
     adjuster.adjust_wind_height(verbose=True)
+
+

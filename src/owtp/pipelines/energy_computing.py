@@ -20,7 +20,7 @@ class EnergyComputing:
 
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
-        self.input_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather" / "era5_land" / "hourly"
+        self.input_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather_height_adjusted" / "era5_land" / "hourly"
         self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy" / "era5_land" / "hourly"
 
     def compute_energy(self, turbine_model="NREL_7MW", n_workers=None, verbose=True):
@@ -49,7 +49,7 @@ class EnergyComputing:
             if verbose:
                 print(f"Computing energy using turbine model: {turbine_model}")
         
-            wind_speed = np.sqrt(np.pow(ddf['u10'], 2) + np.pow(ddf['v10'], 2))
+            wind_speed = ddf["ws"]
 
             mwh = self.windspeed_to_MWh(wind_speed, turbine_model=turbine_model)
             
@@ -69,7 +69,7 @@ class EnergyComputing:
             client.close()
             cluster.close()
 
-    def get_power_curve(self, turbine_model="GE_1.5MW"):
+    def get_power_curve(self, turbine_model="NREL_7MW"):
         """Get the power curve for a specified turbine model."""
 
         t_lib = Turbines()
