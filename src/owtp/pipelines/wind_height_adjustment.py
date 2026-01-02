@@ -75,7 +75,13 @@ class WindHeightAdjustment:
                 # Convert z0_df to pandas if it's still a Dask object
                 if isinstance(z0_df, dd.DataFrame):
                     z0_df = z0_df.compute()
-                
+
+                # Round latitude and longitude to match for merging
+                partition_df['latitude'] = partition_df['latitude'].round(1)
+                partition_df['longitude'] = partition_df['longitude'].round(1)
+                z0_df['latitude'] = z0_df['latitude'].round(1)
+                z0_df['longitude'] = z0_df['longitude'].round(1)
+
                 # Merge with z0 values
                 ordered = partition_df.merge(z0_df, on=["latitude", "longitude"], how="left")
                 

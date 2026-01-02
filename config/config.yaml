@@ -15,7 +15,16 @@ paths_local:
   masks: data/masks/
 
 rolling_calibrations:
+  start_date: 2005-04-24 22:00:00
+  end_date: 2024-12-31 23:00:00
   window_size: 1825 # in days
   step_size: 365 # in days
   gap_size: 30 # in days
   eval_size: 365 # in days
+  final_window_size: 5110 # in days
+  final_eval_size: 1460 # in days
+
+mean_variance_optimization:
+  total_turbines: 100
+  lambda_values: [0, 0.1, 0.5, 1.0]
+  min_revenue_threshold: 10.0

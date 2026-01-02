@@ -5,22 +5,18 @@ import numpy as np
 import cvxpy as cp
 import pandas as pd
 
-from owtp.others import rolling
-
 
 class MeanVariancePortfolioOptimizer:
     """
     Mean-variance portfolio optimization for wind farm locations.
     """
 
-    def __init__(self, start: pd.Timestamp, end: pd.Timestamp, target: Literal["paths", "paths_local"] = "paths_local"):
+    def __init__(self, target: Literal["paths", "paths_local"] = "paths_local"):
         self.config = owtp.config.load_yaml_config()
-
-        self.file_name = rolling.format_window_str(start, end)
         
-        self.mean_revenue_path = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "mean" / f"{self.file_name}.parquet"
-        self.covariance_csv_path = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix" / f"{self.file_name}.csv"
-        self.covariance_parquet_path = Path(self.config[target]['processed_data']) / "parquet" / "covariance_matrix" / f"{self.file_name}.parquet"
+        self.mean_revenue_path = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "mean" / "mean_revenue.parquet"
+        self.covariance_csv_path = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix" / "covariance_matrix_pivoted.csv"
+        self.covariance_parquet_path = Path(self.config[target]['processed_data']) / "parquet" / "covariance_matrix" / "covariance_matrix_pivoted.parquet"
         
         self.output_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "portfolio_weights"
         self.output_parquet_dir.mkdir(parents=True, exist_ok=True)
@@ -32,7 +28,6 @@ class MeanVariancePortfolioOptimizer:
         self.covariance_matrix = None
         self.location_to_idx = None
         self.idx_to_location = None
-
 
     def load_data(self, verbose=True):
         """Load mean revenues and covariance matrix."""
@@ -235,12 +230,13 @@ class MeanVariancePortfolioOptimizer:
         
         return weights_full, weights_int_full, results
 
-    def save_weights(self, weights_continuous, weights_integer, results, window_suffix="", suffix="", verbose=True):
+    def save_weights(self, weights_continuous, weights_integer, results, suffix="", verbose=True):
         """Save portfolio weights to disk."""
 
-        output_parquet_dir = self.output_parquet_dir / suffix / window_suffix
+
+        output_parquet_dir = self.output_parquet_dir / suffix
         output_parquet_dir.mkdir(parents=True, exist_ok=True)
-        output_csv_dir = self.output_csv_dir / suffix / window_suffix
+        output_csv_dir = self.output_csv_dir / suffix
         output_csv_dir.mkdir(parents=True, exist_ok=True)
         
         weights_df = self.mean_revenue_df[['location', 'latitude', 'longitude', 'mean_revenue']].copy()
@@ -278,56 +274,40 @@ class MeanVariancePortfolioOptimizer:
 
 
 if __name__ == "__main__":
+    optimizer = MeanVariancePortfolioOptimizer(target="paths_local")
+    
+    # Load data
+    optimizer.load_data(verbose=True)
 
-    config = owtp.config.load_yaml_config()
-    start = pd.Timestamp(config['rolling_calibrations']['start_date'])
-    end = pd.Timestamp(config['rolling_calibrations']['end_date'])
+    # PARAMETERS
+    total_turbines = 100
+    lambda_risk = 1e-4
+    min_revenue_threshold = 10.0  # EUR/hour
+    max_locations = None
+    
+    # Run optimization
+    weights_cont, weights_int, results = optimizer.optimize(
+        total_turbines=total_turbines,
+        lambda_risk=lambda_risk,
+        min_revenue_threshold=min_revenue_threshold,
+        max_locations=max_locations,
+        verbose=True
+    )
+    
+    suffix = f"_({total_turbines})_({lambda_risk})_({min_revenue_threshold})" # no max_locations for the moment (not implemented)
+    optimizer.save_weights(weights_cont, weights_int, results, suffix=suffix, verbose=True)
+    
+    print("\n" + "="*60)
+    print("Top 10 locations by turbine allocation:")
+    print("="*60)
+    
+    top_locations = weights_int.argsort()[::-1][:10]
 
-    windows = rolling.get_windows(start, end)
-
-    for window in windows:
-        print(f"\nProcessing window: {rolling.format_window_str(window['train_window_start'], window['train_window_end'])}")
-
-        optimizer = MeanVariancePortfolioOptimizer(start=window['train_window_start'], end=window['train_window_end'], target="paths_local")
-        
-        # Load data
-        optimizer.load_data(verbose=True)
-
-        # Parameters
-        total_turbines = config['mean_variance_optimization']['total_turbines']
-        lambda_values = config['mean_variance_optimization']['lambda_values']
-        min_revenue_threshold = config['mean_variance_optimization']['min_revenue_threshold']
-        max_locations = None
-
-        # Saving parameters
-        window_suffix = rolling.format_window_str(window['train_window_start'], window['train_window_end'])
-
-
-        for lambda_risk in lambda_values:
-            
-            # Run optimization
-            weights_cont, weights_int, results = optimizer.optimize(
-                total_turbines=total_turbines,
-                lambda_risk=lambda_risk,
-                min_revenue_threshold=min_revenue_threshold,
-                max_locations=max_locations,
-                verbose=True
-            )
-        
-            suffix = f"_({total_turbines})_({lambda_risk})_({min_revenue_threshold})" # no max_locations for the moment (not implemented)
-            optimizer.save_weights(weights_cont, weights_int, results, window_suffix=window_suffix, suffix=suffix, verbose=True)
-            
-            print("\n" + "="*60)
-            print("Top 10 locations by turbine allocation:")
-            print("="*60)
-            
-            top_locations = weights_int.argsort()[::-1][:10]
-
-            for i, idx in enumerate(top_locations):
-                if weights_int[idx] > 0:
-                    loc = optimizer.mean_revenue_df.loc[idx, 'location']
-                    lat = optimizer.mean_revenue_df.loc[idx, 'latitude']
-                    lon = optimizer.mean_revenue_df.loc[idx, 'longitude']
-                    rev = optimizer.mean_revenue_df.loc[idx, 'mean_revenue']
-                    n_turbines = weights_int[idx]
-                    print(f"{i+1}. {loc} ({lat:.1f}, {lon:.1f}): {n_turbines} turbines, {rev:.2f} EUR/hour mean revenue")
+    for i, idx in enumerate(top_locations):
+        if weights_int[idx] > 0:
+            loc = optimizer.mean_revenue_df.loc[idx, 'location']
+            lat = optimizer.mean_revenue_df.loc[idx, 'latitude']
+            lon = optimizer.mean_revenue_df.loc[idx, 'longitude']
+            rev = optimizer.mean_revenue_df.loc[idx, 'mean_revenue']
+            n_turbines = weights_int[idx]
+            print(f"{i+1}. {loc} ({lat:.1f}, {lon:.1f}): {n_turbines} turbines, {rev:.2f} EUR/hour mean revenue")

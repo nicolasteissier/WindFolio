@@ -62,12 +62,12 @@ class CovarianceMatrixComputer:
 
         bin_list = list(bins)
         
-        partition_pairs = itertools.combinations(bin_list, 2)
+        partition_pairs = list(itertools.combinations(bin_list, 2))
 
         process_map(
             self._handle_partition_pairs,
             *zip(*partition_pairs),
-            [windows]*len(bin_list),
+            [windows]*len(partition_pairs),
             max_workers=n_workers,
             chunksize=1,
             desc="Processing partition pairs",

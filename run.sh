@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Hello my friend"
+echo "STARTING FBD PROJECT PIPELINE"
 
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -86,4 +86,29 @@ echo "Creating visualisation of mean-variance optimization results..."
 echo "--------------------------------"
 uv run src/owtp/visualisations/portfolio/visualise_turbine_allocation.py
 echo ""
+
+echo "--------------------------------"
+echo "Computing portfolio revenues..."
+echo "--------------------------------"
+uv run src/owtp/pipelines/compute_portfolio_revenues.py
+echo ""
+
+echo "--------------------------------"
+echo "Computing random allocation portfolio revenues..."
+echo "--------------------------------"
+uv run src/owtp/pipelines/random_portfolio_allocation.py
+echo ""
+
+echo "--------------------------------"
+echo "Ploting portfolio revenues..."
+echo "--------------------------------"
+uv run src/owtp/visualisations/portfolio/visualise_windows_revenues.py
+echo ""
+
+echo "--------------------------------"
+echo "Ploting cumulative portfolio revenues..."
+echo "--------------------------------"
+uv run src/owtp/visualisations/portfolio/visualise_cumulative_revenues.py
+echo ""
+
 

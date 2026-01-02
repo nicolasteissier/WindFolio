@@ -39,8 +39,8 @@ class MeanRevenueComputer:
 
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=1,
-            memory_limit='4GB',
+            threads_per_worker=4,
+            memory_limit='20GB',
             processes=True,
             dashboard_address=':8788'
         )
@@ -91,35 +91,41 @@ class MeanRevenueComputer:
 
             if verbose and not has_partitioning:
                 raise ValueError("Partitioning columns 'lat_bin' and 'lon_bin' not found in revenue data.")
+
+            # Process each partition independently
+            def compute_partition_mean(partition_df, window_start, window_end):
+                """
+                Compute mean revenue for all locations within a partition.
+                This function operates on a single partition (pandas DataFrame).
+                """
+                mask = (partition_df['time'] >= window_start) & (partition_df['time'] <= window_end)
+                # Group by exact location within this partition
+                mean_by_location = partition_df.loc[mask].groupby(['latitude', 'longitude']).agg(
+                    mean_revenue=('revenue', 'mean'),
+                    lat_bin=('lat_bin', 'first'),
+                    lon_bin=('lon_bin', 'first')
+                ).reset_index()
+                
+                return mean_by_location
+            
+            # Define output metadata
+            meta_df = {
+                'latitude': np.float64,
+                'longitude': np.float64,
+                'mean_revenue': np.float64,
+                'lat_bin': np.int64,
+                'lon_bin': np.int64
+            }
+
+            min_time = ddf_revenues['time'].min().compute()
+            max_time = ddf_revenues['time'].max().compute()
             
             for window in rolling.get_windows(
-                ddf_revenues['time'].min().compute(),
-                ddf_revenues['time'].max().compute()
+                min_time,
+                max_time
                 ):
-                # Process each partition independently
-                def compute_partition_mean(partition_df, window_start, window_end):
-                    """
-                    Compute mean revenue for all locations within a partition.
-                    This function operates on a single partition (pandas DataFrame).
-                    """
-                    mask = (partition_df['time'] >= window_start) & (partition_df['time'] <= window_end)
-                    # Group by exact location within this partition
-                    mean_by_location = partition_df.loc[mask].groupby(['latitude', 'longitude']).agg(
-                        mean_revenue=('revenue', 'mean'),
-                        lat_bin=('lat_bin', 'first'),
-                        lon_bin=('lon_bin', 'first')
-                    ).reset_index()
-                    
-                    return mean_by_location
-                
-                # Define output metadata
-                meta_df = {
-                    'latitude': np.float64,
-                    'longitude': np.float64,
-                    'mean_revenue': np.float64,
-                    'lat_bin': np.int64,
-                    'lon_bin': np.int64
-                }
+                if verbose:
+                    print(f"\nProcessing window: {rolling.format_window_str(window['train_window_start'], window['train_window_end'])}")
 
                 # Apply to all partitions
                 ddf_means = ddf_revenues.map_partitions(
@@ -156,7 +162,7 @@ class MeanRevenueComputer:
                 mean_df.to_parquet(mean_revenue_path, index=False)
                 
                 if verbose:
-                    print(f"\nSaved mean revenue to {mean_revenue_path}")
+                    print(f"\nSaved mean revenue for window {rolling.format_window_str(window['train_window_start'], window['train_window_end'])} to {mean_revenue_path}")
                     print(f"  - Min mean revenue: {mean_df['mean_revenue'].min():.2f}")
                     print(f"  - Max mean revenue: {mean_df['mean_revenue'].max():.2f}")
                     print(f"  - Avg mean revenue: {mean_df['mean_revenue'].mean():.2f}")

@@ -226,3 +226,6 @@ data/*
 
 # UV
 uv.lock
+
+# Figures
+reports/figures/*
