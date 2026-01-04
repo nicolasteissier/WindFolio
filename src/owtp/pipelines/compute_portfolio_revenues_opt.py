@@ -117,7 +117,7 @@ class PortfolioRevenueComputer:
             ddf_revenues = dd.from_pandas(pd.DataFrame(), npartitions=1)
             for loc in weights_df[['latitude', 'longitude']].unique().itertuples(index=False):
                 part = dd.read_parquet(
-                    self.input_revenues_dir / f"lat_{loc['latitude'].round(1)}_lon_{loc['longitude'].round(1)}",
+                    self.input_revenues_dir / f"lat_bin={loc['latitude'].round(1)}" / f"lon_bin={loc['longitude'].round(1)}",
                     engine="pyarrow",
                     split_row_groups="infer",
                     calculate_divisions=False
