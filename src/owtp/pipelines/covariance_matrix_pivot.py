@@ -134,7 +134,7 @@ class CovarianceMatrixPivot:
             
             if locations == expected_locations:
                 if verbose:
-                    print("✓ Locations match location_mapping.parquet perfectly")
+                    print("Locations match location_mapping.parquet perfectly")
             else:
                 missing_in_cov = set(expected_locations) - set(locations)
                 missing_in_map = set(locations) - set(expected_locations)
@@ -167,7 +167,7 @@ class CovarianceMatrixPivot:
             eigvals = np.linalg.eigvalsh(cov_df.values)
             n_negative = np.sum(eigvals < 0)
             if n_negative == 0:
-                print("\n✓ Covariance matrix is positive definite")
+                print("\nCovariance matrix is positive definite")
             else:
                 print(f"WARNING: Covariance matrix has {n_negative} negative eigenvalues")
 
@@ -175,4 +175,4 @@ class CovarianceMatrixPivot:
 if __name__ == "__main__":
     pivoter = CovarianceMatrixPivot(target="paths_local")
     pivoter.pivot_covariance_matrices(verbose=True)
-    pivoter.check_covariance_matrix()
+    # pivoter.check_covariance_matrix()

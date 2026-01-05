@@ -172,7 +172,6 @@ class MeanVariancePortfolioOptimizer:
         
         # Optional: limit number of locations with turbines (sparsity)
         if max_locations is not None:
-            # TODO: implement cardinality constraint ?
             if verbose:
                 print(f"  - Note: max_locations constraint not yet implemented, ignoring this constraint.")
         
@@ -189,14 +188,14 @@ class MeanVariancePortfolioOptimizer:
             prob.solve(solver=cp.SCS, verbose=False)
         
         if verbose:
-            print(f"✓ Solver finished with status: {prob.status}")
+            print(f"Solver finished with status: {prob.status}")
         
         if prob.status not in ["optimal", "optimal_inaccurate"]:
             raise RuntimeError(f"Optimization failed with status: {prob.status}")
         
         # Extract results
         weights_opt = weights.value
-        # Round to nearest integer (with round half to even TODO: check if pertinent)
+        # Round to nearest integer
         weights_opt_int = np.round(weights_opt).astype(int)
         
         # Create full-size arrays (including filtered-out locations)

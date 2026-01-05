@@ -25,7 +25,7 @@ class WindHeightAdjustment:
         self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather_height_adjusted" / "era5_land" / "hourly"
 
         self.ORIGINAL_HEIGHT = 10  # meters
-        self.TARGET_HEIGHT = 100   # meters
+        self.TARGET_HEIGHT = 175   # meters
 
         self.use_real_z0 = True
         self.constant_alpha = 0.143  # 1/7th power law
@@ -39,7 +39,7 @@ class WindHeightAdjustment:
         # Distributed scheduler for performance monitoring and memory management
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=2,
+            threads_per_worker=4,
             memory_limit='30GB',
             processes=True,
             dashboard_address=':8787'

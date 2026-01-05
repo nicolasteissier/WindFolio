@@ -40,10 +40,11 @@ class WindowRevenueVisualiser:
             
             if not summary_path.exists():
                 if verbose:
-                    print(f"⚠ Warning: Summary file not found for λ={lambda_risk} at {summary_path}")
+                    print(f"Warning: Summary file not found for λ={lambda_risk} at {summary_path}")
                 continue
             
             summary_df = pd.read_csv(summary_path)
+            summary_df = summary_df.iloc[:-1]
             summary_df['lambda'] = lambda_risk
             summary_df['portfolio_type'] = 'optimized'
             all_summaries.append(summary_df)
@@ -58,6 +59,8 @@ class WindowRevenueVisualiser:
             
             if summary_path.exists():
                 summary_df = pd.read_csv(summary_path)
+                summary_df = summary_df.iloc[:-1]
+
                 summary_df['lambda'] = 'random'
                 summary_df['portfolio_type'] = 'random'
                 all_summaries.append(summary_df)
@@ -65,7 +68,7 @@ class WindowRevenueVisualiser:
                 if verbose:
                     print(f"  Loaded {len(summary_df)} windows for random baseline")
             elif verbose:
-                print(f"⚠ Warning: Random baseline not found at {summary_path}")
+                print(f"Warning: Random baseline not found at {summary_path}")
         
         if not all_summaries:
             raise FileNotFoundError("No summary files found. Run compute_portfolio_revenues.py first.")
@@ -135,11 +138,11 @@ class WindowRevenueVisualiser:
             )
         
         # Formatting
-        ax.set_xlabel('Evaluation Period End', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Total Revenue (EUR)', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Evaluation Period End', fontsize=14)
+        ax.set_ylabel('Total Revenue (EUR)', fontsize=14)
         ax.set_title(
-            f'Portfolio Revenue Over Time\n({self.total_turbines} turbines, min revenue ≥ {self.min_revenue_threshold} EUR/hour)',
-            fontsize=14,
+            f'Portfolio Revenue Over Time\n({self.total_turbines} turbines)', # , min revenue ≥ {self.min_revenue_threshold} EUR/hour)
+            fontsize=16,
             fontweight='bold',
             pad=20
         )
@@ -148,10 +151,11 @@ class WindowRevenueVisualiser:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax.xaxis.set_major_locator(mdates.YearLocator())
         ax.xaxis.set_minor_locator(mdates.MonthLocator(interval=6))
-        plt.xticks(rotation=45, ha='right')
+        plt.xticks(rotation=45, ha='right', fontsize=12)
         
         # Format y-axis with thousands separator
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+        ax.tick_params(axis='y', labelsize=12)
         
         # Add grid
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
@@ -162,9 +166,9 @@ class WindowRevenueVisualiser:
             loc='best',
             frameon=True,
             shadow=True,
-            fontsize=11,
+            fontsize=13,
             title='Risk Aversion',
-            title_fontsize=12
+            title_fontsize=14
         )
         
         # Tight layout
@@ -175,7 +179,7 @@ class WindowRevenueVisualiser:
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         
         if verbose:
-            print(f"\n✓ Saved figure to: {output_path}")
+            print(f"\nSaved figure to: {output_path}")
         
         plt.show()
         
@@ -230,11 +234,11 @@ class WindowRevenueVisualiser:
             )
         
         # Formatting
-        ax.set_xlabel('Evaluation Period End', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Mean Hourly Revenue (EUR/hour)', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Evaluation Period End', fontsize=14)
+        ax.set_ylabel('Mean Hourly Revenue (EUR/hour)', fontsize=14)
         ax.set_title(
-            f'Portfolio Mean Hourly Revenue Over Time\n({self.total_turbines} turbines, min revenue ≥ {self.min_revenue_threshold} EUR/hour)',
-            fontsize=14,
+            f'Portfolio Mean Hourly Revenue Over Time\n({self.total_turbines} turbines)', # , min revenue ≥ {self.min_revenue_threshold} EUR/hour)',
+            fontsize=16,
             fontweight='bold',
             pad=20
         )
@@ -243,10 +247,11 @@ class WindowRevenueVisualiser:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax.xaxis.set_major_locator(mdates.YearLocator())
         ax.xaxis.set_minor_locator(mdates.MonthLocator(interval=6))
-        plt.xticks(rotation=45, ha='right')
+        plt.xticks(rotation=45, ha='right', fontsize=12)
         
         # Format y-axis with thousands separator
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.2f}'))
+        ax.tick_params(axis='y', labelsize=12)
         
         # Add grid
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
@@ -257,9 +262,9 @@ class WindowRevenueVisualiser:
             loc='best',
             frameon=True,
             shadow=True,
-            fontsize=11,
+            fontsize=13,
             title='Risk Aversion',
-            title_fontsize=12
+            title_fontsize=14
         )
         
         # Tight layout
@@ -270,7 +275,7 @@ class WindowRevenueVisualiser:
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         
         if verbose:
-            print(f"\n✓ Saved figure to: {output_path}")
+            print(f"\nSaved figure to: {output_path}")
         
         plt.show()
         
@@ -328,11 +333,11 @@ class WindowRevenueVisualiser:
         ax.set_yscale('log')
         
         # Formatting
-        ax.set_xlabel('Evaluation Period End', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Total Revenue (EUR) - Log Scale', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Evaluation Period End', fontsize=14)
+        ax.set_ylabel('Total Revenue (EUR) - Log Scale', fontsize=14)
         ax.set_title(
-            f'Portfolio Revenue Over Time (Log Scale)\n({self.total_turbines} turbines, min revenue ≥ {self.min_revenue_threshold} EUR/hour)',
-            fontsize=14,
+            f'Portfolio Revenue Over Time (Log Scale)\n({self.total_turbines} turbines)', # , min revenue ≥ {self.min_revenue_threshold} EUR/hour)
+            fontsize=16,
             fontweight='bold',
             pad=20
         )
@@ -341,7 +346,7 @@ class WindowRevenueVisualiser:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax.xaxis.set_major_locator(mdates.YearLocator())
         ax.xaxis.set_minor_locator(mdates.MonthLocator(interval=6))
-        plt.xticks(rotation=45, ha='right')
+        plt.xticks(rotation=45, ha='right', fontsize=12)
         
         # Add grid
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5, which='both')
@@ -352,9 +357,9 @@ class WindowRevenueVisualiser:
             loc='best',
             frameon=True,
             shadow=True,
-            fontsize=11,
+            fontsize=13,
             title='Risk Aversion',
-            title_fontsize=12
+            title_fontsize=14
         )
         
         # Tight layout
@@ -365,7 +370,7 @@ class WindowRevenueVisualiser:
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         
         if verbose:
-            print(f"\n✓ Saved figure to: {output_path}")
+            print(f"\nSaved figure to: {output_path}")
         
         plt.show()
         
@@ -423,11 +428,11 @@ class WindowRevenueVisualiser:
         ax.set_yscale('log')
         
         # Formatting
-        ax.set_xlabel('Evaluation Period End', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Mean Hourly Revenue (EUR/hour) - Log Scale', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Evaluation Period End', fontsize=14)
+        ax.set_ylabel('Mean Hourly Revenue (EUR/hour) - Log Scale', fontsize=14)
         ax.set_title(
-            f'Portfolio Mean Hourly Revenue Over Time (Log Scale)\n({self.total_turbines} turbines, min revenue ≥ {self.min_revenue_threshold} EUR/hour)',
-            fontsize=14,
+            f'Portfolio Mean Hourly Revenue Over Time (Log Scale)\n({self.total_turbines} turbines)', # , min revenue ≥ {self.min_revenue_threshold} EUR/hour)',
+            fontsize=16,
             fontweight='bold',
             pad=20
         )
@@ -436,7 +441,7 @@ class WindowRevenueVisualiser:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax.xaxis.set_major_locator(mdates.YearLocator())
         ax.xaxis.set_minor_locator(mdates.MonthLocator(interval=6))
-        plt.xticks(rotation=45, ha='right')
+        plt.xticks(rotation=45, ha='right', fontsize=12)
         
         # Add grid
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5, which='both')
@@ -447,9 +452,9 @@ class WindowRevenueVisualiser:
             loc='best',
             frameon=True,
             shadow=True,
-            fontsize=11,
+            fontsize=13,
             title='Risk Aversion',
-            title_fontsize=12
+            title_fontsize=14
         )
         
         # Tight layout
@@ -460,7 +465,7 @@ class WindowRevenueVisualiser:
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         
         if verbose:
-            print(f"\n✓ Saved figure to: {output_path}")
+            print(f"\nSaved figure to: {output_path}")
         
         plt.show()
         

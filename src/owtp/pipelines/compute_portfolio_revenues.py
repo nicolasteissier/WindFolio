@@ -89,7 +89,7 @@ class PortfolioRevenueComputer:
         try:
             weights_df = self.load_portfolio_weights(train_window_str, param_suffix, verbose=verbose)
         except FileNotFoundError as e:
-            print(f"⚠ Skipping: {e}")
+            print(f"Skipping: {e}")
             return
         
         # Create location to weight mapping
@@ -166,7 +166,7 @@ class PortfolioRevenueComputer:
             weighted_df = ddf_weighted.compute()
             
             if verbose:
-                print(f"  ✓ Computed revenues for {len(weighted_df)} location-hour combinations")
+                print(f"  Computed revenues for {len(weighted_df)} location-hour combinations")
                 print(f"    Time range: {weighted_df['time'].min()} to {weighted_df['time'].max()}")
             
             # Aggregate by time to get hourly portfolio revenue
@@ -265,7 +265,7 @@ class PortfolioRevenueComputer:
         summary_df.to_csv(summary_path, index=False)
         
         if verbose:
-            print(f"\n  ✓ Saved results:")
+            print(f"\n  Saved results:")
             print(f"    Hourly: {hourly_path}")
             print(f"    Summary: {summary_path}")
 
@@ -306,7 +306,7 @@ class PortfolioRevenueComputer:
                         print(f"\n[{i}/{len(windows)}] Window {i}, λ={config_value}")
                     else:
                         print(f"\n[{i}/{len(windows)}] Window {i}, Random baseline")
-                
+
                 try:
                     self.compute_portfolio_revenues(
                         window=window,
@@ -315,7 +315,7 @@ class PortfolioRevenueComputer:
                         verbose=verbose
                     )
                 except Exception as e:
-                    print(f"✗ Error processing window {i} with config={config_value}: {e}")
+                    print(f"Error processing window {i} with config={config_value}: {e}")
                     continue
 
 

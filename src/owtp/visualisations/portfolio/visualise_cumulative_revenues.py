@@ -12,7 +12,7 @@ class CumulativeRevenueVisualiser:
     Visualise cumulative portfolio revenues across rolling windows for different lambda values.
     """
 
-    def __init__(self, target: Literal["paths", "paths_local"] = "paths_local"):
+    def __init__(self, target: Literal["paths", "paths_local"] = "paths_local", include_random=False):
         self.config = owtp.config.load_yaml_config()
         
         self.input_summary_dir = Path(self.config[target]['processed_data']) / "csv" / "portfolio_revenues_summary"
@@ -23,7 +23,7 @@ class CumulativeRevenueVisualiser:
         self.total_turbines = self.config['mean_variance_optimization']['total_turbines']
         self.lambda_values = self.config['mean_variance_optimization']['lambda_values']
         self.min_revenue_threshold = self.config['mean_variance_optimization']['min_revenue_threshold']
-        self.include_random = True  # Include random baseline in plots
+        self.include_random = include_random  # Include random baseline in plots
 
     def load_all_summaries(self, verbose: bool = True) -> pd.DataFrame:
         """
@@ -40,10 +40,11 @@ class CumulativeRevenueVisualiser:
             
             if not summary_path.exists():
                 if verbose:
-                    print(f"⚠ Warning: Summary file not found for λ={lambda_risk} at {summary_path}")
+                    print(f"Warning: Summary file not found for λ={lambda_risk} at {summary_path}")
                 continue
             
             summary_df = pd.read_csv(summary_path)
+            summary_df = summary_df.iloc[:-1]
             summary_df['lambda'] = lambda_risk
             summary_df['portfolio_type'] = 'optimized'
             all_summaries.append(summary_df)
@@ -58,6 +59,7 @@ class CumulativeRevenueVisualiser:
             
             if summary_path.exists():
                 summary_df = pd.read_csv(summary_path)
+                summary_df = summary_df.iloc[:-1]
                 summary_df['lambda'] = 'random'
                 summary_df['portfolio_type'] = 'random'
                 all_summaries.append(summary_df)
@@ -65,7 +67,7 @@ class CumulativeRevenueVisualiser:
                 if verbose:
                     print(f"  Loaded {len(summary_df)} windows for random baseline")
             elif verbose:
-                print(f"⚠ Warning: Random baseline not found at {summary_path}")
+                print(f"Warning: Random baseline not found at {summary_path}")
         
         if not all_summaries:
             raise FileNotFoundError("No summary files found. Run compute_portfolio_revenues.py first.")
@@ -143,11 +145,11 @@ class CumulativeRevenueVisualiser:
             )
         
         # Formatting
-        ax.set_xlabel('Evaluation Period End', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Cumulative Total Revenue (EUR)', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Evaluation Period End', fontsize=14)
+        ax.set_ylabel('Cumulative Total Revenue (EUR)', fontsize=14)
         ax.set_title(
-            f'Cumulative Portfolio Revenue Over Time\n({self.total_turbines} turbines, min revenue ≥ {self.min_revenue_threshold} EUR/hour)',
-            fontsize=14,
+            f'Cumulative Portfolio Revenue Over Time\n({self.total_turbines} turbines)', # , min revenue ≥ {self.min_revenue_threshold} EUR/hour)
+            fontsize=16,
             fontweight='bold',
             pad=20
         )
@@ -156,10 +158,11 @@ class CumulativeRevenueVisualiser:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax.xaxis.set_major_locator(mdates.YearLocator())
         ax.xaxis.set_minor_locator(mdates.MonthLocator(interval=6))
-        plt.xticks(rotation=45, ha='right')
+        plt.xticks(rotation=45, ha='right', fontsize=12)
         
         # Format y-axis with thousands separator
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+        ax.tick_params(axis='y', labelsize=12)
         
         # Add grid
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
@@ -170,9 +173,9 @@ class CumulativeRevenueVisualiser:
             loc='best',
             frameon=True,
             shadow=True,
-            fontsize=11,
+            fontsize=13,
             title='Risk Aversion',
-            title_fontsize=12
+            title_fontsize=14
         )
         
         # Tight layout
@@ -183,7 +186,7 @@ class CumulativeRevenueVisualiser:
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         
         if verbose:
-            print(f"\n✓ Saved figure to: {output_path}")
+            print(f"\nSaved figure to: {output_path}")
         
         plt.show()
         
@@ -244,11 +247,11 @@ class CumulativeRevenueVisualiser:
         ax.set_yscale('log')
         
         # Formatting
-        ax.set_xlabel('Evaluation Period End', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Cumulative Total Revenue (EUR) - Log Scale', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Evaluation Period End', fontsize=14)
+        ax.set_ylabel('Cumulative Total Revenue (EUR) - Log Scale', fontsize=14)
         ax.set_title(
-            f'Cumulative Portfolio Revenue Over Time (Log Scale)\n({self.total_turbines} turbines, min revenue ≥ {self.min_revenue_threshold} EUR/hour)',
-            fontsize=14,
+            f'Cumulative Portfolio Revenue Over Time (Log Scale)\n({self.total_turbines} turbines)', # , min revenue ≥ {self.min_revenue_threshold} EUR/hour)
+            fontsize=16,
             fontweight='bold',
             pad=20
         )
@@ -257,7 +260,7 @@ class CumulativeRevenueVisualiser:
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax.xaxis.set_major_locator(mdates.YearLocator())
         ax.xaxis.set_minor_locator(mdates.MonthLocator(interval=6))
-        plt.xticks(rotation=45, ha='right')
+        plt.xticks(rotation=45, ha='right', fontsize=12)
         
         # Add grid
         ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5, which='both')
@@ -268,9 +271,9 @@ class CumulativeRevenueVisualiser:
             loc='best',
             frameon=True,
             shadow=True,
-            fontsize=11,
+            fontsize=13,
             title='Risk Aversion',
-            title_fontsize=12
+            title_fontsize=14
         )
         
         # Tight layout
@@ -281,7 +284,7 @@ class CumulativeRevenueVisualiser:
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         
         if verbose:
-            print(f"\n✓ Saved figure to: {output_path}")
+            print(f"\nSaved figure to: {output_path}")
         
         plt.show()
         
@@ -289,7 +292,7 @@ class CumulativeRevenueVisualiser:
 
 
 if __name__ == "__main__":
-    visualiser = CumulativeRevenueVisualiser(target="paths_local")
+    visualiser = CumulativeRevenueVisualiser(target="paths_local", include_random=False)
     
     # Plot cumulative revenues
     print("=" * 80)
