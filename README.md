@@ -1,4 +1,4 @@
-# Optimal Wind Turbine Placement
+# WindFolio: A Mean-Variance Approach To Optimal Wind Turbine Placement
 
 Mean-variance approach to optimal wind turbine site selection and portfolio backtesting in France using large-scale weather data and EPEX spot electricity prices.
 
@@ -92,16 +92,26 @@ The `run.sh` script executes these steps sequentially:
 
 Key parameters in `config/config.yaml`:
 
-```yaml
-rolling_calibrations:
-  window_size: 1825              # Training window (days)
-  step_size: 365                 # Rolling step (days)
-  eval_size: 365                 # Test window (days)
+- Optimization problem parameters:
 
-mean_variance_optimization:
-  total_turbines: 100           # Total number of turbines to allocate
-  lambda_values: [0.0, 0.00001, 0.0001, ...]  # Risk aversion parameters for mean-variance optimisation
-```
+   ```yaml
+   rolling_calibrations:
+      window_size: 1825              # Training window (days)
+      step_size: 365                 # Rolling step (days)
+      eval_size: 365                 # Test window (days)
+
+   mean_variance_optimization:
+      total_turbines: 100           # Total number of turbines to allocate
+      lambda_values: [0.0, 0.00001, 0.0001, ...]  # Risk aversion parameters for mean-variance optimisation
+   ```
+
+- Resource management parameters for Dask parallel operations (adjust based on computational resources):
+   ```yaml
+   clustering:                      
+      n_workers: 4                   # Number of parallel workers
+      threads_per_worker: 1          # Threads per worker
+      memory_limit: 4GB              # Memory limit per worker
+   ```
 
 ## Environment Setup
 
