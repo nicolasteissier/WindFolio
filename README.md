@@ -24,7 +24,7 @@ This project processes large-scale spatiotemporal datasets:
 
 ### Data Access
 
-**Pre-processed data and full report**: [Dropbox link placeholder]
+**Pre-processed data and full report**: [Data on Switch Drive](https://drive.switch.ch/index.php/s/cE58Ul3hUnZhLw6)
 
 **For raw data collection**, API credentials are required:
 
@@ -121,13 +121,13 @@ All dependencies are installed automatically using uv when the ```./run.sh``` sc
 
 Instructions for Windows OS execution:
  
-```bash
+```sh
 # MacOS/ Linux:
 # Comment this line:
 # curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Windows (PowerShell):
-# uncomment this line:
+# Uncomment this line:
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
@@ -136,3 +136,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 **Different time periods**: Adjust `rolling_calibrations` parameters in `config/config.yaml`.
 
 **Different turbine models**: The `energy_computing.py` pipeline uses the `turbine-models` library. Change turbine specifications there.
+
+## Authors
+
+This project was developed by Nathan Gromb, Christopher Soriano, and Nicolas Teissier as part of FIN-525 course at EPFL (2025-2026).
