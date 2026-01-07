@@ -6,6 +6,9 @@ import zipfile
 from typing import Literal
 
 class EpexSpotRepoHourlyDataFetcher:
+    """
+    Fetch EPEX spot price data from the GitHub repository.
+    """
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
 
@@ -52,6 +55,9 @@ class EpexSpotRepoHourlyDataFetcher:
             print(f"An error occurred while fetching EPEX spot data from GitHub repository: {e}")
 
 class EpexSpotEmberDataFetcher:
+    """
+    Fetch EPEX spot price data from Ember dataset.
+    """
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
 

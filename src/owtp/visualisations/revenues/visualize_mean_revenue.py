@@ -12,7 +12,6 @@ def plot_mean_revenue_distribution(
     """
     Load and plot the mean revenue distribution across all locations.
     """
-    # Load configuration and data
     config = owtp.config.load_yaml_config()
     data_path = Path(config[target]['processed_data']) / "parquet" / "revenues" / "mean" / "mean_revenue.parquet"
     output_path = Path(config[target]['visualisations']) / "revenues" / "mean_revenue_distribution.png"
@@ -24,17 +23,14 @@ def plot_mean_revenue_distribution(
     print(f"Loaded {len(df)} locations")
     print(f"Mean revenue range: {df['mean_revenue'].min():.2f} - {df['mean_revenue'].max():.2f}")
     
-    # Create figure with subplots
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     
-    # Histogram of mean revenue distribution
     axes[0].hist(df['mean_revenue'], bins=50, edgecolor='black', alpha=0.7)
     axes[0].set_xlabel('Mean Revenue')
     axes[0].set_ylabel('Number of Locations')
     axes[0].set_title('Mean Revenue Distribution')
     axes[0].grid(True, alpha=0.3)
     
-    # Add statistics text
     stats_text = f"Total Locations: {len(df)}\n"
     stats_text += f"Mean: {df['mean_revenue'].mean():.2f}\n"
     stats_text += f"Median: {df['mean_revenue'].median():.2f}\n"
@@ -46,7 +42,6 @@ def plot_mean_revenue_distribution(
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
                 fontsize=9)
     
-    # Spatial distribution of mean revenue
     scatter = axes[1].scatter(
         df['longitude'], 
         df['latitude'],

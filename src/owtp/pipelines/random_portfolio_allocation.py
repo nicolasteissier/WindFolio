@@ -10,7 +10,7 @@ from owtp.others import rolling
 class RandomPortfolioAllocator:
     """
     Create random portfolio allocations as a baseline for comparison.
-    Randomly allocates turbines across eligible locations (above min_revenue_threshold).
+    Randomly allocates turbines across some locations
     """
 
     def __init__(self, start: pd.Timestamp, end: pd.Timestamp, target: Literal["paths", "paths_local"] = "paths_local", random_seed: int = 42):
@@ -62,10 +62,8 @@ class RandomPortfolioAllocator:
         if self.mean_revenue_df is None:
             self.load_data(verbose=verbose)
         
-        # Set random seed for reproducibility
         np.random.seed(self.random_seed)
         
-        # Filter locations by minimum revenue if specified
         if min_revenue_threshold is not None:
             eligible_mask = self.mean_revenue_df['mean_revenue'] >= min_revenue_threshold
             
@@ -83,21 +81,16 @@ class RandomPortfolioAllocator:
         if n_eligible == 0:
             raise ValueError("No eligible locations after filtering")
         
-        # Random allocation strategy: uniform random weights then normalize
         random_weights = np.random.uniform(0, 1, size=n_eligible)
         
-        # Normalize to sum to total_turbines
         random_weights = random_weights / random_weights.sum() * total_turbines
         
-        # Round to integers
         weights_int = np.round(random_weights).astype(int)
         
-        # Adjust to ensure exact total (distribute remainder randomly)
         current_total = weights_int.sum()
         difference = total_turbines - current_total
         
         if difference != 0:
-            # Find indices with non-zero weights or randomly select
             adjustment_pool = np.arange(len(weights_int))
             np.random.shuffle(adjustment_pool)
             
@@ -109,14 +102,12 @@ class RandomPortfolioAllocator:
                     if weights_int[idx] > 0:
                         weights_int[idx] -= 1
         
-        # Create full-size arrays (including filtered-out locations)
         weights_continuous = np.zeros(len(self.mean_revenue_df))
         weights_continuous[eligible_indices] = random_weights
         
         weights_integer = np.zeros(len(self.mean_revenue_df), dtype=int)
         weights_integer[eligible_indices] = weights_int
         
-        # Calculate allocation metrics
         results = {
             'expected_return': float(self.mean_revenue_df['mean_revenue'].values @ weights_integer),
             'total_turbines': int(weights_integer.sum()),
@@ -146,7 +137,6 @@ class RandomPortfolioAllocator:
         weights_df['weight_continuous'] = weights_continuous
         weights_df['weight_integer'] = weights_integer
         
-        # Filter to only show locations with non-zero allocation
         weights_active_df = weights_df[weights_df['weight_integer'] > 0].copy()
         weights_active_df = weights_active_df.sort_values('weight_integer', ascending=False)
         
@@ -156,14 +146,12 @@ class RandomPortfolioAllocator:
         weights_df.to_parquet(parquet_path, index=False)
         weights_df.to_csv(csv_path, index=False)
         
-        # Save active weights only
         parquet_path_active = output_parquet_dir / f"portfolio_weights_active{suffix}.parquet"
         csv_path_active = output_csv_dir / f"portfolio_weights_active{suffix}.csv"
         
         weights_active_df.to_parquet(parquet_path_active, index=False)
         weights_active_df.to_csv(csv_path_active, index=False)
         
-        # Save results summary
         results_df = pd.DataFrame([results])
         results_path = output_csv_dir / f"allocation_results{suffix}.csv"
         results_df.to_csv(results_path, index=False)
@@ -184,7 +172,6 @@ if __name__ == "__main__":
 
     windows = rolling.get_windows(start, end)
 
-    # Parameters
     total_turbines = config['mean_variance_optimization']['total_turbines']
     min_revenue_threshold = config['mean_variance_optimization']['min_revenue_threshold']
     random_seed = 42
@@ -199,13 +186,10 @@ if __name__ == "__main__":
             random_seed=random_seed
         )
         
-        # Load data
         allocator.load_data(verbose=True)
 
-        # Saving parameters
         window_suffix = rolling.format_window_str(window['train_window_start'], window['train_window_end'])
         
-        # Run random allocation
         weights_cont, weights_int, results = allocator.random_allocate(
             total_turbines=total_turbines,
             min_revenue_threshold=min_revenue_threshold,

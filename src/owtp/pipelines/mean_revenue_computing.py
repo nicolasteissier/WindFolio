@@ -35,7 +35,7 @@ class MeanRevenueComputer:
         """
         
         if n_workers is None:
-            n_workers = os.cpu_count() // 2 # type: ignore
+            n_workers = os.cpu_count() // 2 
 
         cluster = LocalCluster(
             n_workers=n_workers,
@@ -61,19 +61,17 @@ class MeanRevenueComputer:
             for meta_file in iterator:
                 meta_file.unlink()
 
-            # Read parquet with explicit divisions to respect partitioning
             ddf_revenues = dd.read_parquet(
                 self.input_revenues_dir,
                 engine="pyarrow",
                 split_row_groups="infer",
-                aggregate_files="lon_bin",  # Use partitioning columns to aggregate files
-                calculate_divisions=False  # Faster since we don't need sorted divisions
+                aggregate_files="lon_bin",  
+                calculate_divisions=False  
             )
 
             if verbose:
                 print(f"\nFound {ddf_revenues.npartitions} partitions in revenue data.")
             
-            # Convert categorical partition columns back to numeric
             ddf_revenues['lat_bin'] = ddf_revenues['lat_bin'].map_partitions(
                 lambda s: s.cat.categories[s.cat.codes].astype(float).astype(np.int64),
                 meta=('lat_bin', np.int64)
@@ -86,20 +84,17 @@ class MeanRevenueComputer:
             if verbose:
                 print("\nComputing mean revenue per location...")
             
-            # Check if partitioning columns exist
             has_partitioning = 'lat_bin' in ddf_revenues.columns and 'lon_bin' in ddf_revenues.columns
 
             if verbose and not has_partitioning:
                 raise ValueError("Partitioning columns 'lat_bin' and 'lon_bin' not found in revenue data.")
 
-            # Process each partition independently
             def compute_partition_mean(partition_df, window_start, window_end):
                 """
                 Compute mean revenue for all locations within a partition.
                 This function operates on a single partition (pandas DataFrame).
                 """
                 mask = (partition_df['time'] >= window_start) & (partition_df['time'] <= window_end)
-                # Group by exact location within this partition
                 mean_by_location = partition_df.loc[mask].groupby(['latitude', 'longitude']).agg(
                     mean_revenue=('revenue', 'mean'),
                     lat_bin=('lat_bin', 'first'),
@@ -108,7 +103,6 @@ class MeanRevenueComputer:
                 
                 return mean_by_location
             
-            # Define output metadata
             meta_df = {
                 'latitude': np.float64,
                 'longitude': np.float64,
@@ -127,7 +121,6 @@ class MeanRevenueComputer:
                 if verbose:
                     print(f"\nProcessing window: {rolling.format_window_str(window['train_window_start'], window['train_window_end'])}")
 
-                # Apply to all partitions
                 ddf_means = ddf_revenues.map_partitions(
                     compute_partition_mean,
                     window_start=window["train_window_start"],
@@ -138,22 +131,17 @@ class MeanRevenueComputer:
                 if verbose:
                     print("\nCollecting results from all partitions...")
                 
-                # Compute and collect all partition means
                 mean_df = ddf_means.compute()
                 
                 if verbose:
                     print(f"\nComputed mean revenue for {len(mean_df)} locations")
                 
-                # Add location identifier
                 mean_df['location'] = mean_df['latitude'].astype(str) + '_' + mean_df['longitude'].astype(str)
                 
-                # Reorder columns
                 mean_df = mean_df[['location', 'latitude', 'longitude', 'mean_revenue', 'lat_bin', 'lon_bin']]
                 
-                # Sort by location for consistency
                 mean_df = mean_df.sort_values('location').reset_index(drop=True)
                 
-                # Save mean revenue (including bins for reference)
                 mean_revenue_path = self.output_revenues_parquet_dir / f"{rolling.format_window_str(window['train_window_start'], window['train_window_end'])}.parquet"
                 if mean_revenue_path.exists():
                     mean_revenue_path.unlink()
@@ -170,7 +158,6 @@ class MeanRevenueComputer:
                     print(f"\nSample of mean revenue data:")
                     print(mean_df.head())
                 
-                # Create and save location mapping
                 location_map = mean_df[['location', 'latitude', 'longitude']].copy()
                 if len(list(self.location_mapping_parquet_dir.glob("*.parquet"))) > 0:
                     for existing_file in self.location_mapping_parquet_dir.glob("*.parquet"):

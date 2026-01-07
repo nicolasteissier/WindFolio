@@ -8,6 +8,7 @@ from ecmwf.datastores import Client
 from typing import Literal
 
 class AerisWeatherDataFetcher:
+    """Fetcher for Aeris weather data from THREDDS server"""
     def __init__(self, target: Literal["paths", "paths_local"], freq: Literal['hourly', '6minute'] = 'hourly'):
         self.config = owtp.config.load_yaml_config()
         self.base_dir = Path(self.config[target]['raw_data']) / "weather" / "aeris" / str(freq)
@@ -43,7 +44,7 @@ class AerisWeatherDataFetcher:
                 station_url = f"{self.file_base_url}/{year}/{station}"
                 self.download_file(station_url, station_file)
                 
-                time.sleep(0.05)  # Polite rate limiting
+                time.sleep(0.05)  # Polite rate limiting!
     
     def get_nc_datasets(self, catalog):
         """Extract all .nc datasets from THREDDS catalog"""
@@ -112,7 +113,6 @@ class ERA5WeatherDataFetcher:
         if dataset == 'era5':
             months = [[m] for m in sum(months, [])]
         days = [f'{d:02d}' for d in range(1, 32)]
-        # Generate times based on frequency (e.g., every 1, 5, 10, 15, 30, or 60 minutes)
         times = [f'{h:02d}:00' for h in range(0, 24)]
         
         # Download by month to reduce number of requests

@@ -25,7 +25,6 @@ class PortfolioRevenueComputer:
         self.output_hourly_dir = Path(self.config[target]['processed_data']) / "parquet" / "portfolio_revenues"
         self.output_summary_dir = Path(self.config[target]['processed_data']) / "csv" / "portfolio_revenues_summary"
         
-        # Get optimization parameters from config
         self.total_turbines = self.config['mean_variance_optimization']['total_turbines']
         self.lambda_values = self.config['mean_variance_optimization']['lambda_values']
         self.min_revenue_threshold = self.config['mean_variance_optimization']['min_revenue_threshold']
@@ -73,7 +72,6 @@ class PortfolioRevenueComputer:
             verbose: Print computation information
         """
         
-        # Generate window identifier based on training period
         train_window_str = rolling.format_window_str(window['train_window_start'], window['train_window_end'])
         eval_window_str = rolling.format_window_str(window['eval_window_start'], window['eval_window_end'])
         
@@ -85,20 +83,17 @@ class PortfolioRevenueComputer:
             print(f"  Parameters: {param_suffix}")
             print(f"{'='*80}\n")
         
-        # Load portfolio weights (from training window)
         try:
             weights_df = self.load_portfolio_weights(train_window_str, param_suffix, verbose=verbose)
         except FileNotFoundError as e:
             print(f"Skipping: {e}")
             return
         
-        # Create location to weight mapping
         location_weights = dict(zip(weights_df['location'], weights_df['weight_integer']))
         
         if verbose:
             print(f"\n  Loading hourly revenues for eval window...")
         
-        # Load hourly revenues using Dask
         if n_workers is None:
             n_workers = os.cpu_count() // 2
         
@@ -112,7 +107,6 @@ class PortfolioRevenueComputer:
         client = Client(cluster)
         
         try:
-            # Read revenues data
             ddf_revenues = dd.read_parquet(
                 self.input_revenues_dir,
                 engine="pyarrow",
@@ -120,7 +114,6 @@ class PortfolioRevenueComputer:
                 calculate_divisions=False
             )
             
-            # Filter to eval window period
             eval_start = window['eval_window_start']
             eval_end = window['eval_window_end']
             
@@ -130,17 +123,14 @@ class PortfolioRevenueComputer:
                 (ddf_revenues['time'] <= eval_end)
             ]
             
-            # Create location identifier
             ddf_eval['location'] = ddf_eval['latitude'].astype(str) + '_' + ddf_eval['longitude'].astype(str)
             
-            # Filter to only portfolio locations
             portfolio_locations = set(location_weights.keys())
             ddf_portfolio = ddf_eval[ddf_eval['location'].isin(portfolio_locations)]
             
             if verbose:
                 print(f"  Computing portfolio revenues...")
             
-            # Map weights to revenues
             def apply_weights(partition_df, weights_dict):
                 """Apply portfolio weights to revenues in a partition"""
                 partition_df = partition_df.copy()
@@ -162,26 +152,23 @@ class PortfolioRevenueComputer:
                 meta=meta_df
             )
             
-            # Compute and collect results
             weighted_df = ddf_weighted.compute()
             
             if verbose:
                 print(f"  Computed revenues for {len(weighted_df)} location-hour combinations")
                 print(f"    Time range: {weighted_df['time'].min()} to {weighted_df['time'].max()}")
             
-            # Aggregate by time to get hourly portfolio revenue
             hourly_portfolio = weighted_df.groupby('time').agg({
                 'portfolio_revenue': 'sum',
                 'revenue': 'sum',  # Total revenue if we had 1 turbine at each location
-                'weight': 'sum'     # Verify total turbines
+                'weight': 'sum'     
             }).reset_index()
             
             hourly_portfolio = hourly_portfolio.sort_values('time').reset_index(drop=True)
             
-            # Calculate cumulative revenue
+            # cumulative revenue computation
             hourly_portfolio['cumulative_revenue'] = hourly_portfolio['portfolio_revenue'].cumsum()
             
-            # Compute summary statistics
             summary = {
                 'train_window_start': window['train_window_start'],
                 'train_window_end': window['train_window_end'],
@@ -206,7 +193,6 @@ class PortfolioRevenueComputer:
                 print(f"    Std hourly revenue: {summary['std_hourly_revenue']:.2f} EUR/hour")
                 print(f"    Revenue range: [{summary['min_hourly_revenue']:.2f}, {summary['max_hourly_revenue']:.2f}]")
             
-            # Save results
             self._save_results(
                 hourly_portfolio,
                 summary,
@@ -231,35 +217,28 @@ class PortfolioRevenueComputer:
     ):
         """Save hourly revenues and summary statistics"""
         
-        # Create output directories
         hourly_dir = self.output_hourly_dir / param_suffix / train_window_str
         hourly_dir.mkdir(parents=True, exist_ok=True)
         
         summary_dir = self.output_summary_dir / param_suffix
         summary_dir.mkdir(parents=True, exist_ok=True)
         
-        # Save hourly revenues
         hourly_path = hourly_dir / f"portfolio_revenues_hourly{param_suffix}.parquet"
         hourly_df.to_parquet(hourly_path, index=False)
         
-        # Save summary statistics
         summary_df = pd.DataFrame([summary])
         summary_path = summary_dir / f"portfolio_revenues_summary{param_suffix}.csv"
         
-        # Append to summary file if it exists, otherwise create new
         if summary_path.exists():
             existing_summary = pd.read_csv(summary_path)
-            # Check if this window already exists
             mask = (
                 (existing_summary['train_window_start'] == str(summary['train_window_start'])) &
                 (existing_summary['train_window_end'] == str(summary['train_window_end']))
             )
             if mask.any():
-                # Update existing entry
                 existing_summary.loc[mask] = summary_df.iloc[0]
                 summary_df = existing_summary
             else:
-                # Append new entry
                 summary_df = pd.concat([existing_summary, summary_df], ignore_index=True)
         
         summary_df.to_csv(summary_path, index=False)
@@ -279,31 +258,27 @@ class PortfolioRevenueComputer:
             include_random: Whether to include random portfolio baseline
         """
         
-        # Get time range from config
         start = pd.Timestamp(self.config['rolling_calibrations']['start_date'])
         end = pd.Timestamp(self.config['rolling_calibrations']['end_date'])
         
-        # Generate all windows
         windows = rolling.get_windows(start, end)
         
-        # Build list of all parameter combinations
         param_configs = []
-        # for lambda_risk in self.lambda_values:
-        #     param_configs.append(('lambda', lambda_risk))
+        for lambda_risk in self.lambda_values:
+            param_configs.append(('lambda', lambda_risk))
         if include_random:
             param_configs.append(('random', 'random'))
         
         if verbose:
-            print(f"Processing {len(windows)} windows × {len(param_configs)} configurations = {len(windows) * len(param_configs)} combinations\n")
+            print(f"Processing {len(windows)} windows for {len(param_configs)} configurations = {len(windows) * len(param_configs)} combinations\n")
         
-        # Process each window and parameter combination
         for i, window in enumerate(windows, 1):
             for config_type, config_value in param_configs:
                 param_suffix = f"_({self.total_turbines})_({config_value})_({self.min_revenue_threshold})"
                 
                 if verbose:
                     if config_type == 'lambda':
-                        print(f"\n[{i}/{len(windows)}] Window {i}, λ={config_value}")
+                        print(f"\n[{i}/{len(windows)}] Window {i}, _lambda={config_value}")
                     else:
                         print(f"\n[{i}/{len(windows)}] Window {i}, Random baseline")
 

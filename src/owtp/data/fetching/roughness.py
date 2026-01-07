@@ -71,10 +71,8 @@ class ERA5RoughnessDataFetcher:
         ]
         
         days = [f'{d:02d}' for d in range(1, 32)]
-        # Generate times based on frequency (e.g., every 1, 5, 10, 15, 30, or 60 minutes)
         times = [f'{h:02d}:00' for h in range(0, 24)]
         
-        # Download
         filename = active_dir / f'roughness_{year}_{month}.nc'
         
         if filename.exists():
@@ -114,7 +112,6 @@ class ERA5RoughnessDataFetcher:
 
     def _interpolate_on(self, input_path: Path, ds_ref: xr.Dataset) -> None:
         """Interpolate roughness dataset onto reference grid and save as Parquet"""
-        # Change extension to .parquet
         output_path = self.roughness_intermediate_dir / "roughness.parquet"
         if output_path.exists():
             print("Interpolated file already exists, skipping.")
@@ -129,11 +126,9 @@ class ERA5RoughnessDataFetcher:
             method="nearest",
         )
 
-        # Print avg roughness variance over time
         roughness_variance = ds_interp["fsr"].var(dim="valid_time").mean().item()
         print(f"Average roughness variance over time: {roughness_variance:.6f}")
         
-        # Average over time dimension
         ds_interp = ds_interp.mean(dim="valid_time")
 
         df = ds_interp.to_dataframe().reset_index()
@@ -154,7 +149,6 @@ class ERA5RoughnessDataFetcher:
         input_path = self._get_roughness_file("intermediate")
 
         try:
-            # Change extension to .parquet
             output_path = self.roughness_processed_dir / "roughness.parquet"
             if output_path.exists():
                 print("Masked file already exists, skipping.")
@@ -182,20 +176,16 @@ class ERA5RoughnessDataFetcher:
 
         france_shape = regionmask.from_geopandas(mask_geodf)
 
-        # Grid from reference file
         reference_path = self._get_era5land_file()
         ds_ref = xr.open_dataset(reference_path, engine="h5netcdf")
         lons = ds_ref["longitude"]
         lats = ds_ref["latitude"]
 
-        # Region index mask on this grid
-        mask_array = france_shape.mask(lons, lats)  # 2D (lat, lon)
+        mask_array = france_shape.mask(lons, lats)  
 
-        # Assume single region, take its index explicitly
         fr_idx = france_shape.numbers[0]
         inside_france = (mask_array == fr_idx)
 
-        # Save boolean mask
         mask_ds = xr.Dataset(
             data_vars={"mask_france": (("latitude", "longitude"), inside_france.data)},
             coords={"latitude": lats, "longitude": lons},
@@ -236,7 +226,7 @@ class ERA5RoughnessDataFetcher:
         df_processed = pd.read_parquet(processed, engine="pyarrow")
 
         fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-        #print dims
+        
         print('Raw data dimensions:', ds_raw.dims)
         ds_raw["fsr"].isel(valid_time=0).plot(ax=axes[0], cmap="viridis")
         df_intermediate_pivot = df_intermediate.pivot_table(index="latitude", columns="longitude", values="fsr")
@@ -257,7 +247,6 @@ class ERA5RoughnessDataFetcher:
         plt.tight_layout()
         plt.savefig("reports/figures/era5/roughness_plot.png")
 
-        # Print dimensions
         print('Resulting dimensions:')
         print(f"Masked data shape: {df_processed.shape}")
         print(f"Number of unique latitudes: {df_processed['latitude'].nunique()}")

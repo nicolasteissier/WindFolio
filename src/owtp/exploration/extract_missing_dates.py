@@ -7,7 +7,6 @@ because their computed returns will be invalid (based on more than one hour gap)
 
 import pandas as pd
 
-# Replace with the actual path to your prices Parquet file
 PATH = '~/Downloads/prices.parquet'
 
 df_prices = pd.read_parquet(PATH)
@@ -22,7 +21,6 @@ existing_dates = set(df_prices_sorted.index)
 expected_dates = set(date_range)
 missing_dates = sorted(expected_dates - existing_dates)
 
-# Group contiguous missing dates
 grouped_missing_dates = []
 if missing_dates:
     current_group = [missing_dates[0]]
@@ -34,7 +32,6 @@ if missing_dates:
             current_group = [missing_dates[i]]
     grouped_missing_dates.append(current_group)
 
-    # Create a more readable format for missing date ranges
     formatted_missing_dates = []
     for group in grouped_missing_dates:
         if len(group) == 1:

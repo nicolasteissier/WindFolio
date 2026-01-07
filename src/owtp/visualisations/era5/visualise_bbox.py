@@ -54,7 +54,6 @@ def visualize_all_bounding_boxes():
     print(f"All bounding boxes visualization saved to {output_path}")
     plt.close()
 
-    # Print info for each area
     for zone, _, area in bbox_gdfs:
         north, west, south, east = area
         print(f"\nZone: {zone}")

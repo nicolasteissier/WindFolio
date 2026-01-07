@@ -18,7 +18,6 @@ class MeanWindSpeedComputer:
     def __init__(self, target: Literal["paths", "paths_local"]):
         self.config = owtp.config.load_yaml_config()
         
-        # Use intermediate data (masked parquet files by date)
         self.input_weather_dir = Path(self.config[target]['intermediate_data']) / "parquet" / "weather" / "era5_land" / "hourly"
 
         self.output_wind_speed_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "wind_speed" / "mean"
@@ -57,7 +56,6 @@ class MeanWindSpeedComputer:
             if verbose:
                 print(f"\nLoading weather data from {self.input_weather_dir}...")
 
-            # Remove system files
             meta = [f for f in self.input_weather_dir.rglob("*.parquet") if f.name.startswith("._")]
             if verbose and len(meta) > 0:
                 print(f"\nFound {len(meta)} system files to remove.")
@@ -65,13 +63,11 @@ class MeanWindSpeedComputer:
             for meta_file in iterator:
                 meta_file.unlink()
 
-            # Get all parquet files
             parquet_files = sorted([f for f in self.input_weather_dir.rglob("*.parquet") if not f.name.startswith("._")])
             
             if verbose:
                 print(f"\nFound {len(parquet_files)} parquet files")
             
-            # Read intermediate parquet files (not partitioned)
             ddf_weather = dd.read_parquet(
                 parquet_files,
                 engine="pyarrow",
@@ -81,40 +77,34 @@ class MeanWindSpeedComputer:
             if verbose:
                 print(f"Loaded {ddf_weather.npartitions} partitions")
             
-            # Round coordinates to 0.1 degree for consistent precision (as done in weather_data_preprocessing.py)
             ddf_weather['latitude'] = (ddf_weather['latitude'] * 10).round() / 10
             ddf_weather['longitude'] = (ddf_weather['longitude'] * 10).round() / 10
             
             if verbose:
                 print("\nComputing wind speed from u10 and v10 components...")
             
-            # Compute wind speed from u10 and v10
             ddf_weather['wind_speed'] = np.sqrt(ddf_weather['u10']**2 + ddf_weather['v10']**2)
             
             if verbose:
                 print("\nComputing mean wind speed per location...")
             
-            # Process each partition independently
             def compute_partition_mean(partition_df):
                 """
                 Compute mean wind speed for all locations within a partition.
                 This function operates on a single partition (pandas DataFrame).
                 """
-                # Group by exact location within this partition
                 mean_by_location = partition_df.groupby(['latitude', 'longitude']).agg(
                     mean_wind_speed=('wind_speed', 'mean')
                 ).reset_index()
                 
                 return mean_by_location
             
-            # Define output metadata
             meta_df = {
                 'latitude': np.float64,
                 'longitude': np.float64,
                 'mean_wind_speed': np.float64,
             }
 
-            # Apply to all partitions
             ddf_means = ddf_weather.map_partitions(
                 compute_partition_mean,
                 meta=meta_df
@@ -123,22 +113,17 @@ class MeanWindSpeedComputer:
             if verbose:
                 print("\nCollecting results from all partitions...")
             
-            # Compute and collect all partition means
             mean_df = ddf_means.compute()
             
             if verbose:
                 print(f"\nComputed mean wind speed for {len(mean_df)} locations")
             
-            # Add location identifier
             mean_df['location'] = mean_df['latitude'].astype(str) + '_' + mean_df['longitude'].astype(str)
             
-            # Reorder columns
             mean_df = mean_df[['location', 'latitude', 'longitude', 'mean_wind_speed']]
             
-            # Sort by location for consistency
             mean_df = mean_df.sort_values('location').reset_index(drop=True)
             
-            # Save mean wind speed (including bins for reference)
             mean_wind_speed_path = self.output_wind_speed_parquet_dir / "mean_wind_speed.parquet"
             mean_df.to_parquet(mean_wind_speed_path, index=False)
             

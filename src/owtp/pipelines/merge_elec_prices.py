@@ -9,7 +9,7 @@ from typing import Literal
 
 class PriceMerger:
     """
-    Comment
+    Merge electricity price data from multiple sources and save as Parquet.
     """
 
     def __init__(self, target: Literal["paths", "paths_local"], freq: Literal['hourly', '6minute'] = 'hourly'):
@@ -19,7 +19,7 @@ class PriceMerger:
 
     def merge_prices(self):
 
-        data = {}   # or use a list if you prefer
+        data = {}   
         files = sorted(file for file in os.listdir(self.input_dir) if not file.startswith('._'))
         for filename in files:
             if filename.endswith(".json"):
@@ -36,9 +36,9 @@ class PriceMerger:
         epex_merged = pd.concat(dataframes) 
 
         epex_merged["startDate"] = pd.to_datetime(
-            epex_merged["startDate"].astype(str),  # make sure it's strings
-            utc=True,                              # interpret offsets like +02:00
-            errors="coerce"                        # invalid -> NaT instead of crash
+            epex_merged["startDate"].astype(str),  
+            utc=True,                             
+            errors="coerce"                       
         )
 
         epex_merged["time"] = epex_merged["startDate"].dt.tz_convert(None)

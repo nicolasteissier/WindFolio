@@ -9,7 +9,7 @@ import os
 
 class RevenuesComputing:
     """
-    Compute revenues from energy and prices data using Dask.
+    Compute revenues from energy and prices data 
     """
 
     def __init__(self, target: Literal["paths", "paths_local"]):
@@ -44,7 +44,7 @@ class RevenuesComputing:
             
             if verbose:
                 print("Loading prices data...")
-            df_prices = pd.read_parquet(self.input_prices_dir / "prices.parquet").reset_index() # using pandas, price data is small
+            df_prices = pd.read_parquet(self.input_prices_dir / "prices.parquet").reset_index() # we use pandas as price data is small
 
             if 'valid_time' in ddf_energy.columns:
                 ddf_energy = ddf_energy.rename(columns={'valid_time': 'time'})
@@ -74,7 +74,6 @@ class RevenuesComputing:
             
             ddf_merged['revenue'] = ddf_merged['mwh'] * ddf_merged['Price (EUR/MWhe)']
             
-            # add lat_bin and lon_bin partitioning
             if 'lat_bin' in ddf_energy.columns and 'lon_bin' in ddf_energy.columns:
                 ddf_revenues = ddf_merged[['time', 'latitude', 'longitude', 'lat_bin', 'lon_bin', 'revenue']]
                 partition_cols = ['lat_bin', 'lon_bin']
@@ -87,7 +86,6 @@ class RevenuesComputing:
 
                 print("Writing revenues to Parquet...")
             
-            # Write to Parquet (partitioned if possible)
             self.output_dir.mkdir(parents=True, exist_ok=True)
             ddf_revenues.to_parquet(
                 self.output_dir,

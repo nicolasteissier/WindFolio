@@ -61,19 +61,17 @@ class MeanEnergyComputer:
             for meta_file in iterator:
                 meta_file.unlink()
 
-            # Read parquet with explicit divisions to respect partitioning
             ddf_energy = dd.read_parquet(
                 self.input_energy_dir,
                 engine="pyarrow",
                 split_row_groups="infer",
-                aggregate_files="lon_bin",  # Use partitioning columns to aggregate files
-                calculate_divisions=False  # Faster since we don't need sorted divisions
+                aggregate_files="lon_bin",  
+                calculate_divisions=False  
             )
 
             if verbose:
                 print(f"\nFound {ddf_energy.npartitions} partitions in energy data.")
             
-            # Convert categorical partition columns back to numeric
             ddf_energy['lat_bin'] = ddf_energy['lat_bin'].map_partitions(
                 lambda s: s.cat.categories[s.cat.codes].astype(float).astype(np.int64),
                 meta=('lat_bin', np.int64)
@@ -86,19 +84,16 @@ class MeanEnergyComputer:
             if verbose:
                 print("\nComputing mean energy per location...")
             
-            # Check if partitioning columns exist
             has_partitioning = 'lat_bin' in ddf_energy.columns and 'lon_bin' in ddf_energy.columns
 
             if verbose and not has_partitioning:
                 raise ValueError("Partitioning columns 'lat_bin' and 'lon_bin' not found in energy data.")
             
-            # Process each partition independently
             def compute_partition_mean(partition_df):
                 """
                 Compute mean energy for all locations within a partition.
                 This function operates on a single partition (pandas DataFrame).
                 """
-                # Group by exact location within this partition
                 mean_by_location = partition_df.groupby(['latitude', 'longitude']).agg(
                     mean_energy=('mwh', 'mean'),
                     lat_bin=('lat_bin', 'first'),
@@ -107,7 +102,6 @@ class MeanEnergyComputer:
                 
                 return mean_by_location
             
-            # Define output metadata
             meta_df = {
                 'latitude': np.float64,
                 'longitude': np.float64,
@@ -116,7 +110,6 @@ class MeanEnergyComputer:
                 'lon_bin': np.int64
             }
 
-            # Apply to all partitions
             ddf_means = ddf_energy.map_partitions(
                 compute_partition_mean,
                 meta=meta_df
@@ -125,22 +118,17 @@ class MeanEnergyComputer:
             if verbose:
                 print("\nCollecting results from all partitions...")
             
-            # Compute and collect all partition means
             mean_df = ddf_means.compute()
             
             if verbose:
                 print(f"\nComputed mean energy for {len(mean_df)} locations")
             
-            # Add location identifier
             mean_df['location'] = mean_df['latitude'].astype(str) + '_' + mean_df['longitude'].astype(str)
             
-            # Reorder columns
             mean_df = mean_df[['location', 'latitude', 'longitude', 'mean_energy', 'lat_bin', 'lon_bin']]
             
-            # Sort by location for consistency
             mean_df = mean_df.sort_values('location').reset_index(drop=True)
             
-            # Save mean energy (including bins for reference)
             mean_energy_path = self.output_energy_parquet_dir / "mean_energy.parquet"
             mean_df.to_parquet(mean_energy_path, index=False)
             

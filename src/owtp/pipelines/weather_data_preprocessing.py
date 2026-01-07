@@ -2,7 +2,6 @@ import owtp.config
 from typing import Literal
 from pathlib import Path
 
-# Processing
 from tqdm.contrib.concurrent import process_map
 import xarray as xr
 import pandas as pd
@@ -14,14 +13,12 @@ from dask.diagnostics.progress import ProgressBar
 from dask.distributed import Client, LocalCluster
 import os
 
-# Plotting
 import seaborn as sns
 import matplotlib.pyplot as plt
 
 class WeatherDataPreprocessor:
     """
-    Converts all .nc weather data files to Parquet format in parallel (year-by-year, `num_workers` processes at a time) using Dask.
-    Reorganizes output into intermediate/parquet/weather/{freq}/{station_id}/{year}
+    Converts all .nc weather data files to Parquet format 
     """
 
     def __init__(self, freq: Literal['hourly', '6minute'] = 'hourly', verbose: bool = True):
@@ -64,7 +61,6 @@ class WeatherDataPreprocessor:
         if verbose:
             print(f"\nFiltered stations to those with complete data ({expected_years} years). Number of remaining stations: {len(filtered_stations)}")
 
-        # Process each station in parallel
         process_map(self.process_station, filtered_stations.keys(),
                     [filtered_stations[station] for station in filtered_stations.keys()],
                     max_workers=4, chunksize=1)
@@ -271,7 +267,6 @@ class Era5WeatherDataPreprocessor:
         if n_workers is None:
             n_workers = os.cpu_count() // 2
         
-        # Distributed scheduler for performance monitoring and memory management
         cluster = LocalCluster(
             n_workers=n_workers,
             threads_per_worker=4,
@@ -288,7 +283,6 @@ class Era5WeatherDataPreprocessor:
         try:
             ddf = self._load_as_dask_df()
             
-            # Create coarse spatial grid for partitioning
             ddf['lat_bin'] = (ddf['latitude'] / spatial_resolution).round().astype(int) * spatial_resolution
             ddf['lon_bin'] = (ddf['longitude'] / spatial_resolution).round().astype(int) * spatial_resolution
             
@@ -319,7 +313,6 @@ class Era5WeatherDataPreprocessor:
         masked_files = self._get_masked_era5land_files()
 
         print(f"Loading {len(masked_files)} masked ERA5-Land Parquet files...")
-        # blocksize controls partition size (smaller = more parallelism)
         ddf = dd.read_parquet(
             [str(file) for file in masked_files],
             engine="pyarrow",
@@ -330,7 +323,6 @@ class Era5WeatherDataPreprocessor:
         ddf["longitude"] = (ddf["longitude"] * 10).round() / 10
         ddf["latitude"] = (ddf["latitude"] * 10).round() / 10
         
-        # Ensure valid_time is datetime type
         if ddf['valid_time'].dtype == 'object':
             ddf['valid_time'] = dd.to_datetime(ddf['valid_time'])
         

@@ -151,7 +151,6 @@ class AerisMissingValuesVisualisation:
 
         fig, ax = plt.subplots(figsize=(10, 6))
 
-        # Sort data and compute cumulative percentages
         sorted_hourly = np.sort(missing_ws_df_hourly['missing_ws_percentage'])
         sorted_6min = np.sort(missing_ws_df_6min['missing_ws_percentage'])
 
@@ -202,12 +201,11 @@ class AerisMissingValuesVisualisation:
         else:
             missing_values_df_with_loc = self.missing_values_df_with_loc_6minute
 
-        # Set up GeoDataFrame
         geometry = [Point(xy) for xy in zip(missing_values_df_with_loc['lon'], 
                                             missing_values_df_with_loc['lat'])]
         gdf = gpd.GeoDataFrame(missing_values_df_with_loc, 
                             geometry=geometry, 
-                            crs='EPSG:4326')  # WGS84 lat/lon
+                            crs='EPSG:4326')  
         
         metro_france_bounds = {
             'lon_min': -5.5,
@@ -230,7 +228,6 @@ class AerisMissingValuesVisualisation:
         france = world[world.NAME == 'France']
         france_proj = france.to_crs('EPSG:2154')
 
-        # Plotting
         fig, ax = plt.subplots(figsize=(9, 8))
 
         norm = Normalize(vmin=0, vmax=100)
@@ -258,7 +255,6 @@ class AerisMissingValuesVisualisation:
         cbar = plt.colorbar(sm, ax=ax, fraction=0.03, pad=0.04)
         cbar.set_label('Missing Wind Speed Values (%)', fontsize=12)
 
-        # Save without title
         plt.savefig(self.output_dir / f'missing_ws_spatial_distribution_{freq}_no_title.png', dpi=300, bbox_inches='tight')
         if verbose:
             print(f"\nSaved spatial distribution plot for missing wind speed values ({freq}).")
@@ -266,7 +262,6 @@ class AerisMissingValuesVisualisation:
         fig.suptitle(f'Spatial Distribution of Missing Wind Speed Data ({freq}) \n in Metropolitan France from ground-based stations dataset from Météo-France', 
                     fontsize=16, y=0.98)
 
-        # Save with title
         plt.savefig(self.output_dir / f'missing_ws_spatial_distribution_{freq}.png', dpi=300, bbox_inches='tight')
         if verbose:
             print(f"Saved spatial distribution plot with title for missing wind speed values ({freq}).")
@@ -302,7 +297,6 @@ class AerisMissingValuesVisualisation:
         
         world = gpd.read_file(geodatasets.get_path('naturalearth.land'))
         
-        # Global map
         fig, ax = plt.subplots(figsize=(15, 10))
         world.plot(ax=ax, color='lightgray', edgecolor='white')
         gdf.plot(ax=ax, color='red', markersize=20, alpha=0.6)
@@ -317,7 +311,7 @@ class AerisMissingValuesVisualisation:
         print(f"Map saved to {output_path}")
         plt.close()
         
-        # France-focused map
+        # The France focused map:
         fig, ax = plt.subplots(figsize=(12, 10))
         world.plot(ax=ax, color='lightgray', edgecolor='white')
         gdf.plot(ax=ax, color='red', markersize=40, alpha=0.6)
@@ -343,7 +337,6 @@ if __name__ == "__main__":
     VISUALISE_HOURLY = True
     VISUALISE_6MINUTE = True
 
-    # Compute missing values
     if VISUALISE_HOURLY:
         missing_ws_df_hourly, nb_stations_hourly = visualiser.compute_missing_values_df(freq='hourly', verbose=True)
         if nb_stations_hourly == 0:
@@ -355,7 +348,6 @@ if __name__ == "__main__":
             VISUALISE_6MINUTE = False
             print("\n /!\ Warning: No 6-minute stations found, skipping 6-minute visualisations. Check input data.")
 
-    # Load missing values with locations
     if VISUALISE_HOURLY:
         missing_ws_with_loc_hourly, nb_stations_with_loc_hourly = visualiser.load_missing_values_df_with_locations(freq='hourly', verbose=True)
         if nb_stations_with_loc_hourly == 0:
@@ -367,7 +359,6 @@ if __name__ == "__main__":
             VISUALISE_6MINUTE = False
             print("\n /!\ Warning: No 6-minute stations with location data found, skipping 6-minute spatial visualisations. Check input data.")
 
-    # Plot visualisations
     if VISUALISE_HOURLY and VISUALISE_6MINUTE:
         visualiser.plot_nans_bar_chart(missing_ws_df_hourly, missing_ws_df_6min, verbose=True)
         visualiser.plot_nans_cdf(missing_ws_df_hourly, missing_ws_df_6min, verbose=True)

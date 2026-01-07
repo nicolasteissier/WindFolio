@@ -15,7 +15,7 @@ import os
 
 class EnergyComputing:
     """
-    Compute energy from weather data.
+    Compute energy (MWh) from weather data for a given wind turbine model power curve.
     """
 
     def __init__(self, target: Literal["paths", "paths_local"]):
@@ -27,9 +27,9 @@ class EnergyComputing:
         """Compute energy from wind speed data using the specified turbine model."""
         
         if n_workers is None:
-            n_workers = os.cpu_count() // 2 # type: ignore
+            n_workers = os.cpu_count() // 2 
         
-        # Distributed scheduler for performance monitoring and memory management
+        
         cluster = LocalCluster(
             n_workers=n_workers,
             threads_per_worker=4,
@@ -78,27 +78,26 @@ class EnergyComputing:
             raise ValueError(f"Turbine model '{turbine_model}' not found in the turbine library.")
     
         turb_group = t_lib.find_group_for_turbine(turbine_model)
-        turbine_specs = t_lib.specs(turbine_model, group = turb_group) # type: ignore
+        turbine_specs = t_lib.specs(turbine_model, group = turb_group) 
 
-        power_curve = extract_power_curve(turbine_specs) # type: ignore
+        power_curve = extract_power_curve(turbine_specs) 
         power_curve = pl.DataFrame({
-            "wind_speed": power_curve["wind_speed"].tolist(), # type: ignore
-            "power_curve_kw": power_curve["power_curve_kw"].tolist(), # type: ignore
+            "wind_speed": power_curve["wind_speed"].tolist(), 
+            "power_curve_kw": power_curve["power_curve_kw"].tolist(), 
         })
         return power_curve
 
     def interp_power(self, ws_values: np.ndarray, ws_curve, p_curve) -> np.ndarray:
         """
+        From Github: https://github.com/NREL/turbine-models
         Linearly interpolate power from wind speed.
         Extrapolation:
         - below min ws -> 0
         - above max ws -> 0 (or last value)
         """
-        # Use np.interp with 0 outside domain
-        # np.interp(x, xp, fp) returns fp[0] for x<xp[0] and fp[-1] for x>xp[-1]
-        # We'll override >max to 0 after.
+
         p = np.interp(ws_values, ws_curve, p_curve)
-        # Set power to 0 below cut-in (already mostly 0 from curve) and above cut-out
+
         cut_in = ws_curve.min()
         cut_out = ws_curve.max()
         p = np.where((ws_values < cut_in) | (ws_values > cut_out), 0.0, p)
@@ -106,7 +105,6 @@ class EnergyComputing:
 
     def windspeed_to_MWh(self, wind_speed_df, turbine_model):
 
-        # first load the power curve
         power_curve = self.get_power_curve(turbine_model)
 
         ws_curve = power_curve["wind_speed"].to_numpy()

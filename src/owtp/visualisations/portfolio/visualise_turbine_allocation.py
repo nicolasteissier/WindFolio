@@ -40,10 +40,9 @@ def plot_turbine_allocation_single(
     if len(df) == 0:
         ax.text(0.5, 0.5, 'No turbines allocated', 
                 ha='center', va='center', transform=ax.transAxes)
-        ax.set_title(f'λ = {lambda_value}', fontsize=11, fontweight='bold')
+        ax.set_title(f'_lambda = {lambda_value}', fontsize=11, fontweight='bold')
         return
     
-    # Plot ALL locations as background (Mean Revenue Spatial Distribution)
     background_scatter = ax.scatter(
         all_locations['longitude'], 
         all_locations['latitude'],
@@ -56,11 +55,10 @@ def plot_turbine_allocation_single(
         zorder=1
     )
     
-    # Plot allocated turbine locations on top
     scatter = ax.scatter(
         df['longitude'], 
         df['latitude'],
-        s=df['weight_integer'] * 30,  # Scale point size
+        s=df['weight_integer'] * 30,  
         c=df['mean_revenue'],
         cmap='YlOrRd',
         alpha=0.9,
@@ -71,7 +69,6 @@ def plot_turbine_allocation_single(
         zorder=5
     )
     
-    # Add text labels for number of turbines
     for _, row in df.iterrows():
         ax.annotate(
             f"{int(row['weight_integer'])}",
@@ -84,21 +81,17 @@ def plot_turbine_allocation_single(
             zorder=10
         )
     
-    # Set labels and title
     ax.set_xlabel('Longitude', fontsize=14, fontweight='bold')
     if show_ylabel:
         ax.set_ylabel('Latitude', fontsize=14, fontweight='bold')
-    ax.set_title(f'λ = {lambda_value}', fontsize=16, fontweight='bold')
+    ax.set_title(f'_lambda = {lambda_value}', fontsize=16, fontweight='bold')
     ax.tick_params(axis='both', labelsize=12)
     
-    # Set proper aspect ratio
     mid_lat = all_locations['latitude'].mean()
     ax.set_aspect(1.0 / np.cos(np.radians(mid_lat)))
     
-    # Add grid
     ax.grid(True, alpha=0.3, linestyle='--')
     
-    # Add statistics text box
     stats_text = f"Turbines: {df['weight_integer'].sum() if df['weight_integer'].sum() <= 100 else 100}\n"
     stats_text += f"Locations: {len(df)}\n"
     stats_text += f"Avg/Loc: {df['weight_integer'].mean():.1f}"
@@ -130,33 +123,27 @@ def plot_turbine_allocation_window(
         min_revenue_threshold: Minimum revenue threshold
         lambda_values: List of lambda risk parameters
     """
-    # Load configuration
     config = owtp.config.load_yaml_config()
     
-    # Load mean revenue data for this window (for background)
     mean_revenue_path = Path(config[target]['processed_data']) / "parquet" / "revenues" / "mean" / f"{window_suffix}.parquet"
     all_locations = pd.read_parquet(mean_revenue_path)
     mean_revenue_path = Path(config[target]['processed_data']) / "parquet" / "revenues" / "mean" / f"{window_suffix}.parquet"
     all_locations = pd.read_parquet(mean_revenue_path)
     
-    # Output path for this window
     output_path = Path(config[target]['visualisations']) / "portfolio" / window_suffix / f"turbine_allocation_comparison_{lambda_values[0]}_{lambda_values[1]}_{lambda_values[2]}_{lambda_values[3]}.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     print(f"\nProcessing window: {window_suffix}")
     print(f"  Total locations in window: {len(all_locations)}")
     
-    # Create figure with subplots (2x2 grid for 4 lambda values)
     fig = plt.figure(figsize=(22, 16))
     
-    # Create GridSpec for better layout control
     import matplotlib.gridspec as gridspec
     gs = gridspec.GridSpec(2, 2, figure=fig, left=0.1, right=0.88, top=0.93, bottom=0.07, 
                           hspace=0.25, wspace=0.05)
     
     axes = [fig.add_subplot(gs[i, j]) for i in range(2) for j in range(2)]
     
-    # First pass: Load all data to determine global color scale
     portfolio_dfs = []
     all_allocated_revenues = []
     
@@ -172,7 +159,6 @@ def plot_turbine_allocation_window(
         else:
             portfolio_dfs.append(pd.DataFrame())
     
-    # Calculate global color scale limits
     vmin_bg = all_locations['mean_revenue'].min()
     vmax_bg = all_locations['mean_revenue'].max()
     
@@ -186,7 +172,6 @@ def plot_turbine_allocation_window(
     print(f"  Global color scale - Background: [{vmin_bg:.2f}, {vmax_bg:.2f}]")
     print(f"  Global color scale - Allocated: [{vmin_alloc:.2f}, {vmax_alloc:.2f}]")
     
-    # Second pass: Plot with global color scale
     scatter_objects_bg = []
     scatter_objects_alloc = []
     
@@ -194,16 +179,15 @@ def plot_turbine_allocation_window(
         df = portfolio_dfs[idx]
         
         if len(df) == 0:
-            print(f"  Warning: No data found for λ={lambda_val}")
-            axes[idx].text(0.5, 0.5, f'No data for λ = {lambda_val}', 
+            print(f"  Warning: No data found for _lambda={lambda_val}")
+            axes[idx].text(0.5, 0.5, f'No data for _lambda = {lambda_val}', 
                           ha='center', va='center', transform=axes[idx].transAxes)
-            axes[idx].set_title(f'λ = {lambda_val}', fontsize=11, fontweight='bold')
+            axes[idx].set_title(f'_lambda = {lambda_val}', fontsize=11, fontweight='bold')
             continue
         
-        print(f"  λ={lambda_val}: {len(df)} locations, {df['weight_integer'].sum()} turbines")
+        print(f"  _lambda={lambda_val}: {len(df)} locations, {df['weight_integer'].sum()} turbines")
         
-        # Plot on corresponding subplot with global color scale
-        show_ylabel = (idx % 2 == 0)  # Only show ylabel on left column
+        show_ylabel = (idx % 2 == 0)  
         bg_scatter, alloc_scatter = plot_turbine_allocation_single(
             axes[idx], 
             all_locations, 
@@ -219,21 +203,17 @@ def plot_turbine_allocation_window(
         scatter_objects_bg.append(bg_scatter)
         scatter_objects_alloc.append(alloc_scatter)
     
-    # Add shared colorbars for the entire figure
     if scatter_objects_bg and scatter_objects_alloc:
-        # Colorbar for background (all France locations) - on the right, top position
         cbar_ax_bg = fig.add_axes([0.90, 0.52, 0.02, 0.38])
         cbar_bg = fig.colorbar(scatter_objects_bg[0], cax=cbar_ax_bg, orientation='vertical')
         cbar_bg.set_label('All Locations\n(EUR/hour)', fontsize=14, weight='bold')
         cbar_bg.ax.tick_params(labelsize=11)
         
-        # Colorbar for allocated locations - on the right, bottom position
         cbar_ax_alloc = fig.add_axes([0.90, 0.08, 0.02, 0.38])
         cbar_alloc = fig.colorbar(scatter_objects_alloc[0], cax=cbar_ax_alloc, orientation='vertical')
         cbar_alloc.set_label('Allocated Locations\n(EUR/hour)', fontsize=14, weight='bold')
         cbar_alloc.ax.tick_params(labelsize=11)
     
-    # Add overall title
     fig.suptitle(f'Wind Turbine Portfolio Allocation - Window {window_suffix} - {total_turbines} turbines', 
                  fontsize=20, fontweight='bold', y=0.98)
     
@@ -256,18 +236,16 @@ def plot_all_windows(
     """
     config = owtp.config.load_yaml_config()
     
-    # Get parameters from config
     total_turbines = config['mean_variance_optimization']['total_turbines']
     lambda_values = config['mean_variance_optimization']['lambda_values']
     min_revenue_threshold = config['mean_variance_optimization']['min_revenue_threshold']
     
-    # Get rolling windows
     start = pd.Timestamp(config['rolling_calibrations']['start_date'])
     end = pd.Timestamp(config['rolling_calibrations']['end_date'])
     windows = rolling.get_windows(start, end)
     
     print(f"Processing {len(windows)} windows...")
-    print(f"Parameters: {total_turbines} turbines, λ ∈ {lambda_values}, min revenue ≥ {min_revenue_threshold}")
+    print(f"Parameters: {total_turbines} turbines, _lambda ∈ {lambda_values}, min revenue ≥ {min_revenue_threshold}")
     
     for window in windows:
         window_suffix = rolling.format_window_str(window['train_window_start'], window['train_window_end'])

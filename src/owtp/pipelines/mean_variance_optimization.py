@@ -10,7 +10,7 @@ from owtp.others import rolling
 
 class MeanVariancePortfolioOptimizer:
     """
-    Mean-variance portfolio optimization for wind farm locations.
+    Mean-variance portfolio optimization for wind turbine location allocation from revenues
     """
 
     def __init__(self, start: pd.Timestamp, end: pd.Timestamp, target: Literal["paths", "paths_local"] = "paths_local"):
@@ -59,7 +59,6 @@ class MeanVariancePortfolioOptimizer:
         else:
             raise FileNotFoundError(f"Pivoted covariance matrix not found at {self.covariance_parquet_path} or {self.covariance_csv_path}")
         
-        # Align covariance matrix with mean revenue locations
         locations_revenue = self.mean_revenue_df['location'].tolist()
         locations_cov = cov_df.index.tolist()
         
@@ -73,15 +72,12 @@ class MeanVariancePortfolioOptimizer:
             print(f"  - Common locations: {len(common_locations)} = {len(common_locations) / len(locations_revenue) * 100:.2f} % of mean revenue locations")
             print(f"                           = {len(common_locations) / len(locations_cov) * 100:.2f} % of covariance locations")
         
-        # Filter mean revenue to common locations and reindex
         self.mean_revenue_df = self.mean_revenue_df[self.mean_revenue_df['location'].isin(common_locations)].copy()
         self.mean_revenue_df = self.mean_revenue_df.set_index('location').loc[common_locations].reset_index()
         
-        # Update location mappings
         self.location_to_idx = {loc: idx for idx, loc in enumerate(common_locations)}
         self.idx_to_location = {idx: loc for loc, idx in self.location_to_idx.items()}
         
-        # Extract aligned covariance matrix
         self.covariance_matrix = cov_df.loc[common_locations, common_locations].values
         
         if verbose:
@@ -115,12 +111,9 @@ class MeanVariancePortfolioOptimizer:
         if self.mean_revenue_df is None or self.covariance_matrix is None:
             self.load_data(verbose=verbose)
         
-        # Filter locations by minimum revenue if specified
         if min_revenue_threshold is not None:
-            # Get diagonal variances for filtering
             location_variances = np.diag(self.covariance_matrix)
             
-            # Filter by both mean revenue AND variance (avoid zero/low variance issues)
             eligible_mask = (self.mean_revenue_df['mean_revenue'] >= min_revenue_threshold) & (location_variances > 1e-6)
             eligible_indices = eligible_mask.values
             
@@ -147,41 +140,34 @@ class MeanVariancePortfolioOptimizer:
             print(f"\nOptimizing portfolio with:")
             print(f"  - {N} locations")
             print(f"  - {total_turbines} total turbines")
-            print(f"  - Risk aversion λ = {lambda_risk}")
+            print(f"  - Risk aversion _lambda = {lambda_risk}")
         
-        # Add small regularization to ensure PSD (handles numerical issues)
         epsilon = 1e-6
         Sigma_reg = Sigma + epsilon * np.eye(N)
         
-        # Wrap with psd_wrap to skip CVXPY's numerical PSD check (which can fail even for valid matrices)
         Sigma_wrapped = cp.psd_wrap(Sigma_reg)
         
-        # Decision variable: number of turbines at each location
         weights = cp.Variable(N)
         
-        # Objective: maximize expected return - risk penalty
         expected_return = mu @ weights
         portfolio_variance = cp.quad_form(weights, Sigma_wrapped)
         objective = cp.Maximize(expected_return - lambda_risk * portfolio_variance)
         
-        # Constraints
         constraints = [
-            weights >= 0,                      # No short selling (non-negative turbines)
-            cp.sum(weights) == total_turbines  # Budget constraint
+            weights >= 0,                      # important for no short selling
+            cp.sum(weights) == total_turbines  # limit total number of turbines that can be allocated 
         ]
         
-        # Optional: limit number of locations with turbines (sparsity)
         if max_locations is not None:
             if verbose:
                 print(f"  - Note: max_locations constraint not yet implemented, ignoring this constraint.")
         
-        # Solve optimization problem
         prob = cp.Problem(objective, constraints)
         
         try:
             if verbose:
                 print(f"\nSolving optimization problem...")
-            prob.solve(solver=cp.CLARABEL, verbose=False) # True for detailed solver output
+            prob.solve(solver=cp.CLARABEL, verbose=False) 
         except:
             if verbose:
                 print(f"\nCLARABEL solver failed, trying SCS solver...")
@@ -193,19 +179,15 @@ class MeanVariancePortfolioOptimizer:
         if prob.status not in ["optimal", "optimal_inaccurate"]:
             raise RuntimeError(f"Optimization failed with status: {prob.status}")
         
-        # Extract results
         weights_opt = weights.value
-        # Round to nearest integer
         weights_opt_int = np.round(weights_opt).astype(int)
         
-        # Create full-size arrays (including filtered-out locations)
         weights_full = np.zeros(len(self.mean_revenue_df))
         weights_full[eligible_indices] = weights_opt
         
         weights_int_full = np.zeros(len(self.mean_revenue_df), dtype=int)
         weights_int_full[eligible_indices] = weights_opt_int
         
-        # Calculate portfolio metrics
         results = {
             'expected_return_continuous': float(mu @ weights_opt),
             'expected_return_integer': float(self.mean_revenue_df['mean_revenue'].values @ weights_int_full),
@@ -246,7 +228,6 @@ class MeanVariancePortfolioOptimizer:
         weights_df['weight_continuous'] = weights_continuous
         weights_df['weight_integer'] = weights_integer
         
-        # Filter to only show locations with non-zero allocation
         weights_active_df = weights_df[weights_df['weight_integer'] > 0].copy()
         weights_active_df = weights_active_df.sort_values('weight_integer', ascending=False)
         
@@ -256,14 +237,13 @@ class MeanVariancePortfolioOptimizer:
         weights_df.to_parquet(parquet_path, index=False)
         weights_df.to_csv(csv_path, index=False)
         
-        # Save active weights only
+        # active means only locations with non-zero integer weights
         parquet_path_active = output_parquet_dir / f"portfolio_weights_active{suffix}.parquet"
         csv_path_active = output_csv_dir / f"portfolio_weights_active{suffix}.csv"
         
         weights_active_df.to_parquet(parquet_path_active, index=False)
         weights_active_df.to_csv(csv_path_active, index=False)
         
-        # Save results summary
         results_df = pd.DataFrame([results])
         results_path = output_csv_dir / f"optimization_results{suffix}.csv"
         results_df.to_csv(results_path, index=False)
@@ -289,22 +269,18 @@ if __name__ == "__main__":
 
         optimizer = MeanVariancePortfolioOptimizer(start=window['train_window_start'], end=window['train_window_end'], target="paths_local")
         
-        # Load data
         optimizer.load_data(verbose=True)
 
-        # Parameters
         total_turbines = config['mean_variance_optimization']['total_turbines']
         lambda_values = config['mean_variance_optimization']['lambda_values']
         min_revenue_threshold = config['mean_variance_optimization']['min_revenue_threshold']
         max_locations = None
 
-        # Saving parameters
         window_suffix = rolling.format_window_str(window['train_window_start'], window['train_window_end'])
 
 
         for lambda_risk in lambda_values:
             
-            # Run optimization
             weights_cont, weights_int, results = optimizer.optimize(
                 total_turbines=total_turbines,
                 lambda_risk=lambda_risk,

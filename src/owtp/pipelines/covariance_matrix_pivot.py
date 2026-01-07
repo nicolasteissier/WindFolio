@@ -103,7 +103,7 @@ class CovarianceMatrixPivot:
         
         cov_df = pd.DataFrame(cov_matrix, index=locations, columns=locations)
         
-        if verbose: # check symmetry
+        if verbose: 
             max_asymmetry = np.max(np.abs(cov_matrix - cov_matrix.T))
             print(f"Matrix symmetry check - max asymmetry: {max_asymmetry:.2e}")
             if max_asymmetry > 1e-10:
@@ -148,7 +148,7 @@ class CovarianceMatrixPivot:
     
     def check_covariance_matrix(self):
         """
-        Simple exploration of the covariance matrix.
+        Simple check of the covariance matrix to check if it rassembles criterias necessary for next operationsin pipeline
         """
         for path in [f for f in self.output_parquet_dir.glob("*.parquet") if not f.name.startswith("._")]:
             cov_df = pd.read_parquet(path)
@@ -175,4 +175,5 @@ class CovarianceMatrixPivot:
 if __name__ == "__main__":
     pivoter = CovarianceMatrixPivot(target="paths_local")
     pivoter.pivot_covariance_matrices(verbose=True)
+
     # pivoter.check_covariance_matrix()

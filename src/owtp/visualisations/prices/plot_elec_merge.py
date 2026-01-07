@@ -7,15 +7,14 @@ RAW_EPEX_SPOT = [f"data/raw/elec/epexspot_{year}_repo.json" for year in range(20
 RAW_EPEX_SPOT_EMBER = "data/raw/elec/epexspot_ember_france.csv"
 MERGED = 'data/intermediate/parquet/prices/hourly/prices.parquet'
 
-# Open and merge RAW_EPEX_SPOT files
 epex_spot = pd.concat(
     pd.read_json(fp) for fp in RAW_EPEX_SPOT
 ).reset_index()
 
 epex_spot["startDate"] = pd.to_datetime(
-    epex_spot["startDate"].astype(str),  # make sure it's strings
-    utc=True,                           # interpret offsets like +02:00
-    errors="coerce"                     # invalid -> NaT instead of crash
+    epex_spot["startDate"].astype(str),  
+    utc=True,                           
+    errors="coerce"                   
 )
 epex_spot.set_index('startDate', inplace=True)
 
@@ -31,7 +30,6 @@ epex_spot_ember.set_index('Datetime (UTC)', inplace=True)
 merged_data = pd.read_parquet(MERGED)
 merged_data.index = pd.to_datetime(merged_data.index, utc=True)
 
-# Print date ranges
 print(f"EPEX Spot data range: {epex_spot.index.min()} to {epex_spot.index.max()}")
 print(f"EPEX Spot Ember data range: {epex_spot_ember.index.min()} to {epex_spot_ember.index.max()}")
 
@@ -49,11 +47,9 @@ axes[1].plot(epex_spot_ember['Price (EUR/MWhe)'].loc[:plot_end].index, epex_spot
 axes[1].set_title("European Wholesale Electricity Price Data\nEmber (France)")
 axes[1].set_ylabel("Price (EUR/MWhe)")
 
-# Find overlap region
 overlap_start = max(epex_spot.index.min(), epex_spot_ember.index.min())
 overlap_end = min(epex_spot.index.max(), epex_spot_ember.index.max())
 
-# Add pastel translucent background for overlap
 axes[0].axvspan(
     overlap_start, overlap_end,
     color='lavender', alpha=0.6, label='Overlap'
@@ -78,7 +74,7 @@ fig.legend(handles=[overlap_patch], loc='lower center', ncol=1, frameon=False)
 
 plt.xlabel("Time")
 plt.tight_layout()
-plt.subplots_adjust(bottom=0.15)  # Increase bottom margin for legend
+plt.subplots_adjust(bottom=0.15)  
 
 plt.savefig("reports/figures/prices/epex_spot_prices.png", dpi=300)
 
@@ -101,7 +97,6 @@ interest_points = [
 
 fig, axes = plt.subplots(len(interest_points), 1, figsize=(6, 3 * len(interest_points)), sharey=True)
 
-# Plot around each interest point
 for i, (point, ax) in enumerate(zip(interest_points, axes.flatten())):
     window_start = point - pd.Timedelta(days=2)
     window_end = point + pd.Timedelta(days=2)
@@ -111,7 +106,6 @@ for i, (point, ax) in enumerate(zip(interest_points, axes.flatten())):
     ax.set_title(f"Electricity Prices Around Interest Point {i+1} ({point.date()})")
     ax.set_ylabel("Price (EUR/MWhe)")
     ax.set_xlabel("Time")
-    # Grid each day
     ax.grid(which='both', axis='x', linestyle='--', linewidth=0.5)
     ax.set_xticks(pd.date_range(start=window_start.normalize(), end=window_end.normalize(), freq='D'))
     ax.set_xticklabels([d.strftime('%Y-%m-%d') if d.day % 2 == 0 else '' for d in pd.date_range(start=window_start.normalize(), end=window_end.normalize(), freq='D')], rotation=45)

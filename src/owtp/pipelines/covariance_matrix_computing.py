@@ -11,9 +11,6 @@ from owtp.others import rolling
 class CovarianceMatrixComputer:
     """
     Compute covariance matrix from revenues data across all locations.
-    
-    This computes the covariance matrix of revenues where each location (lat, lon)
-    is treated as a separate variable/asset.
     """
 
     def __init__(self, target: Literal["paths", "paths_local"]):
@@ -28,19 +25,17 @@ class CovarianceMatrixComputer:
             output_csv.unlink()
 
         if n_workers is None:
-            n_workers = os.cpu_count() // 2 # type: ignore
+            n_workers = os.cpu_count() // 2 
         
         bins = set(self.input_revenues_dir.glob("lat_bin=*/lon_bin=*"))
 
         if verbose:
             print("Processing partitions one by one")
 
-        # We get the min and max date from a single bin as they should all be complete regarding time
         sample = pd.read_parquet(next(iter(bins)))
         date_min, date_max = sample['time'].min(), sample['time'].max()
         windows = rolling.get_windows(date_min, date_max)
 
-        # Create file headers
         self.output_dir.mkdir(parents=True, exist_ok=True)
         for window in windows:
             start = window["train_window_start"]
@@ -81,7 +76,6 @@ class CovarianceMatrixComputer:
 
         pivoted = self._pivot_and_clean(df)
 
-        # Skip if no valid columns remain
         if pivoted.shape[1] == 0:
             print(f"No valid columns in partition {file_path}, skipping.")
             return
@@ -91,11 +85,9 @@ class CovarianceMatrixComputer:
             end = window["train_window_end"]
 
             windowed = pivoted.loc[(pivoted.index >= start) & (pivoted.index <= end)]
-            # Compute covariance matrix, melt to long format (col1, col2, covariance), and append to CSV
             cov = windowed.cov()
             cov_melted = cov.reset_index(names="col1").melt(id_vars="col1", var_name="col2", value_name="covariance")
             
-            # Keep only upper triangle (including diagonal) to avoid duplicates in symmetric matrix
             cov_melted = cov_melted[cov_melted["col1"] <= cov_melted["col2"]]
             
             output_file = self.output_dir / f"{rolling.format_window_str(start, end)}.csv"
@@ -112,7 +104,6 @@ class CovarianceMatrixComputer:
         pivoted1 = self._pivot_and_clean(df1)
         pivoted2 = self._pivot_and_clean(df2)
 
-        # Skip if no valid columns remain in either partition
         if pivoted1.shape[1] == 0 or pivoted2.shape[1] == 0:
             print(f"No valid columns in partition pair {file_path1}, {file_path2}, skipping.")
             return
@@ -129,21 +120,17 @@ class CovarianceMatrixComputer:
 
             combined = pd.concat([windowed1, windowed2], axis=1)
 
-            # Compute cross-covariance matrix
             cov_matrix = combined.cov().loc[windowed1.columns, windowed2.columns]
 
-            # Melt to long format and append to CSV
             cov_melted = cov_matrix.reset_index(names="col1").melt(id_vars="col1", var_name="col2", value_name="covariance")
             
             output_file = self.output_dir / f"{rolling.format_window_str(start, end)}.csv"
             cov_melted.to_csv(output_file, mode="a", header=False, index=False)
 
     def _pivot_and_clean(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Pivot the revenues DataFrame and clean invalid columns."""
-        # Pivot the DataFrame to have time as index and (latitude, longitude) as columns
+        """Pivot the revenues DataFrame to have time as index and (latitude, longitude) as columns and clean invalid columns."""
         pivoted = df.pivot(index="time", columns=["latitude", "longitude"], values="revenue").sort_index()
         
-        # Flatten column names
         pivoted.columns = [f"{lat}_{lon}" for lat, lon in pivoted.columns]
 
         return pivoted

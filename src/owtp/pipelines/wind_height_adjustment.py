@@ -28,15 +28,14 @@ class WindHeightAdjustment:
         self.TARGET_HEIGHT = 175   # meters
 
         self.use_real_z0 = True
-        self.constant_alpha = 0.143  # 1/7th power law
+        self.constant_alpha = 0.143  # Not used. We used it before having the real z0 data. (kept for debugging)
 
     def adjust_wind_height(self, n_workers=None, verbose=True):
         """Adjust wind heights from input weather data using alpha or z0 values."""
 
         if n_workers is None:
-            n_workers = os.cpu_count() // 2 # type: ignore
+            n_workers = os.cpu_count() // 2 
 
-        # Distributed scheduler for performance monitoring and memory management
         cluster = LocalCluster(
             n_workers=n_workers,
             threads_per_worker=4,
@@ -72,47 +71,38 @@ class WindHeightAdjustment:
                 """
                 Merge function to add z0 values to the weather data partition.
                 """
-                # Convert z0_df to pandas if it's still a Dask object
                 if isinstance(z0_df, dd.DataFrame):
                     z0_df = z0_df.compute()
 
-                # Round latitude and longitude to match for merging
                 partition_df['latitude'] = partition_df['latitude'].round(1)
                 partition_df['longitude'] = partition_df['longitude'].round(1)
                 z0_df['latitude'] = z0_df['latitude'].round(1)
                 z0_df['longitude'] = z0_df['longitude'].round(1)
 
-                # Merge with z0 values
                 ordered = partition_df.merge(z0_df, on=["latitude", "longitude"], how="left")
                 
-                # Calculate wind speed as a pandas Series
                 wind_speed = np.sqrt(ordered['u10']**2 + ordered['v10']**2)
                 
-                # Calculate adjustment factor using log law
                 log_ratio = np.log(self.TARGET_HEIGHT / ordered['fsr']) / np.log(self.ORIGINAL_HEIGHT / ordered['fsr'])
                 adjusted_wind_speed = wind_speed * log_ratio
                 
-                # Return DataFrame with required columns
                 return ordered[["valid_time", "latitude", "longitude", "lat_bin", "lon_bin"]].assign(ws=adjusted_wind_speed)
 
             
-            # Define output metadata
             meta_df = {
                 'valid_time': 'datetime64[ns]',
-                'latitude': 'f8',  # float64
+                'latitude': 'f8',  
                 'longitude': 'f8',
-                'lat_bin': 'category',   # int64
+                'lat_bin': 'category',   
                 'lon_bin': 'category',
                 'ws': 'f8'
             }
             
-            # Compute z0 once as pandas DataFrame
             z0_df = ddf_z0.compute()
 
-            # Apply to all partitions
             ddf_adjusted = ddf_weather.map_partitions(
                 merge_partition,
-                z0_df=z0_df,  # Pass pandas DataFrame instead of Dask DataFrame
+                z0_df=z0_df, 
                 meta=meta_df
             )
 

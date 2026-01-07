@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 
 def plot(path: str, output_path: str, dataset):
-    # Load data
     print(f"{dataset} - dataset loading from {path}...")
 
     if path.endswith(".nc"):
@@ -19,26 +18,20 @@ def plot(path: str, output_path: str, dataset):
     elif path.endswith(".parquet"):
         df = pd.read_parquet(path)
         print(f"{dataset} - dataset loaded.")
-        # keep the first time only for plotting
         first_time = df['valid_time'].min()
         df_time = df[df['valid_time'] == first_time]
         
-        # Round coordinates to match grid precision
         df_time['latitude'] = df_time['latitude'].round(1)
         df_time['longitude'] = df_time['longitude'].round(1)
         
-        # Define full regular grid with 0.1 step
         full_lats = np.arange(41.3, 51.2, 0.1).round(1)
         full_lons = np.arange(-5.2, 9.7, 0.1).round(1)
         spatial_dims = (len(full_lats), len(full_lons))
         time = first_time
         
-        # df with lat as rows and lon as columns, values as wind speed
-        # Pivot the DataFrame to have shape (lat, lon), filling missing values with NaN
         interim_data_u10 = df_time.pivot(index='latitude', columns='longitude', values='u10')
         interim_data_v10 = df_time.pivot(index='latitude', columns='longitude', values='v10')
         
-        # Reindex to full regular grid, fill missing with NaN
         interim_data_u10 = interim_data_u10.reindex(index=full_lats, columns=full_lons)
         interim_data_v10 = interim_data_v10.reindex(index=full_lats, columns=full_lons)
         wind_speed_values = (interim_data_u10.values ** 2 + interim_data_v10.values ** 2) ** 0.5
@@ -50,7 +43,6 @@ def plot(path: str, output_path: str, dataset):
     else:
         raise ValueError("Unsupported file format. Please provide a .nc or .parquet file.")
 
-    # Prepare figure with explicit axes
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_aspect(spatial_dims[1] / spatial_dims[0])
 
@@ -63,7 +55,6 @@ def plot(path: str, output_path: str, dataset):
         add_colorbar=False
     )
     
-    # Add colorbar with proper sizing
     cbar = fig.colorbar(data_plot, ax=ax, shrink=0.8, pad=0.03)
     cbar.set_label('Wind Speed (m/s)')
     
@@ -72,7 +63,6 @@ def plot(path: str, output_path: str, dataset):
     ax.set_ylabel("Latitude")
     ax.grid(True, which="both", ls="--", lw=0.5, alpha=0.3)
 
-    # Print of one square, in degrees
     latitudes = data['latitude'].values
     longitudes = data['longitude'].values
     lat_step = abs(latitudes[1] - latitudes[0])
