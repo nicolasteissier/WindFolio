@@ -23,17 +23,17 @@ class EnergyComputing:
         self.input_dir = Path(self.config[target]['processed_data']) / "parquet" / "weather_height_adjusted" / "era5_land" / "hourly"
         self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "energy" / "era5_land" / "hourly"
 
-    def compute_energy(self, turbine_model="NREL_7MW", n_workers=None, verbose=True):
+    def compute_energy(self, turbine_model="NREL_7MW", verbose=True):
         """Compute energy from wind speed data using the specified turbine model."""
         
-        if n_workers is None:
-            n_workers = os.cpu_count() // 2 
-        
+        n_workers = self.config['clustering']['n_workers']
+        threads_per_worker = self.config['clustering']['threads_per_worker']
+        memory_limit = self.config['clustering']['memory_limit']
         
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=4,
-            memory_limit='20GB',
+            threads_per_worker=threads_per_worker,
+            memory_limit=memory_limit,
             processes=True,
             dashboard_address=':8787'
         )

@@ -18,16 +18,17 @@ class RevenuesComputing:
         self.input_prices_dir = Path(self.config[target]['processed_data']) / "parquet" / "prices" / str("hourly")
         self.output_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / str("hourly")
 
-    def compute_revenues(self, n_workers=None, verbose=True):
+    def compute_revenues(self, verbose=True):
         """Compute revenues from energy and prices data"""
 
-        if n_workers is None:
-            n_workers = os.cpu_count() // 2
+        n_workers = self.config['clustering']['n_workers']
+        threads_per_worker = self.config['clustering']['threads_per_worker']
+        memory_limit = self.config['clustering']['memory_limit']
 
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=4,
-            memory_limit='30GB',
+            threads_per_worker=threads_per_worker,
+            memory_limit=memory_limit,
             processes=True,
             dashboard_address=':8787'
         )
@@ -78,7 +79,7 @@ class RevenuesComputing:
                 ddf_revenues = ddf_merged[['time', 'latitude', 'longitude', 'lat_bin', 'lon_bin', 'revenue']]
                 partition_cols = ['lat_bin', 'lon_bin']
             else:
-                print("/!\ Warning: 'lat_bin' and 'lon_bin' columns not found in energy data. Writing without partitioning.\n")
+                print("/!\\ Warning: 'lat_bin' and 'lon_bin' columns not found in energy data. Writing without partitioning.\n")
                 raise ValueError("Partitioning columns 'lat_bin' and 'lon_bin' not found in energy data.")
             
             if verbose:

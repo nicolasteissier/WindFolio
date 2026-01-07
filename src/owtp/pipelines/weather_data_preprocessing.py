@@ -251,7 +251,7 @@ class Era5WeatherDataPreprocessor:
         return ds.where(mask, other=float("nan"))
     
 
-    def restructure(self, verbose: bool = True, n_workers: int = 4, spatial_resolution: float = 1.0) -> None:
+    def restructure(self, verbose: bool = True, spatial_resolution: float = 1.0) -> None:
         """
         Convert all masked files to Parquet with optimized parallelization.
         Uses distributed scheduler for better performance and memory management.
@@ -259,18 +259,18 @@ class Era5WeatherDataPreprocessor:
         
         Args:
             verbose: Print progress information
-            n_workers: Number of Dask workers (defaults to CPU count)
             spatial_resolution: Grid resolution in degrees for partitioning (default: 1.0°)
                             Smaller = more files but faster spatial queries
                             Larger = fewer files but slower spatial queries
         """        
-        if n_workers is None:
-            n_workers = os.cpu_count() // 2
-        
+        n_workers = self.config['clustering']['n_workers']
+        threads_per_worker = self.config['clustering']['threads_per_worker']
+        memory_limit = self.config['clustering']['memory_limit']
+
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=4,
-            memory_limit='30GB',
+            threads_per_worker=threads_per_worker,
+            memory_limit=memory_limit,
             processes=True,
             dashboard_address=':8787'
         )

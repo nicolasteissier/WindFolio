@@ -18,14 +18,13 @@ class CovarianceMatrixComputer:
         self.input_revenues_dir = Path(self.config[target]['processed_data']) / "parquet" / "revenues" / "hourly"
         self.output_dir = Path(self.config[target]['processed_data']) / "csv" / "covariance_matrix_long"
 
-    def compute_covariance_matrix(self, n_workers=None, verbose=True):
+    def compute_covariance_matrix(self, verbose=True):
         """Compute covariance matrix of revenues across all locations."""
         
         for output_csv in self.output_dir.glob("*.csv"):
             output_csv.unlink()
 
-        if n_workers is None:
-            n_workers = os.cpu_count() // 2 
+        n_workers = self.config['clustering']['n_workers']
         
         bins = set(self.input_revenues_dir.glob("lat_bin=*/lon_bin=*"))
 

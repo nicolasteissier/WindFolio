@@ -30,16 +30,17 @@ class WindHeightAdjustment:
         self.use_real_z0 = True
         self.constant_alpha = 0.143  # Not used. We used it before having the real z0 data. (kept for debugging)
 
-    def adjust_wind_height(self, n_workers=None, verbose=True):
+    def adjust_wind_height(self, verbose=True):
         """Adjust wind heights from input weather data using alpha or z0 values."""
 
-        if n_workers is None:
-            n_workers = os.cpu_count() // 2 
+        n_workers = self.config['clustering']['n_workers']
+        threads_per_worker = self.config['clustering']['threads_per_worker']
+        memory_limit = self.config['clustering']['memory_limit']
 
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=4,
-            memory_limit='30GB',
+            threads_per_worker=threads_per_worker,
+            memory_limit=memory_limit,
             processes=True,
             dashboard_address=':8787'
         )

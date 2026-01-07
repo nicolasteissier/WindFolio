@@ -25,7 +25,7 @@ class MeanRevenueComputer:
         self.location_mapping_parquet_dir = Path(self.config[target]['processed_data']) / "parquet" / "locations"
         self.location_mapping_parquet_dir.mkdir(parents=True, exist_ok=True)
 
-    def compute_mean_revenue(self, n_workers=None, verbose=True):
+    def compute_mean_revenue(self, verbose=True):
         """
         Compute mean revenue per location and save results.
         
@@ -34,13 +34,14 @@ class MeanRevenueComputer:
             - location_mapping.parquet: Location identifiers and coordinates
         """
         
-        if n_workers is None:
-            n_workers = os.cpu_count() // 2 
-
+        n_workers = self.config['clustering']['n_workers']
+        threads_per_worker = self.config['clustering']['threads_per_worker']
+        memory_limit = self.config['clustering']['memory_limit']
+        
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=4,
-            memory_limit='20GB',
+            threads_per_worker=threads_per_worker,
+            memory_limit=memory_limit,
             processes=True,
             dashboard_address=':8788'
         )

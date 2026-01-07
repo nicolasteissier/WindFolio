@@ -26,5 +26,11 @@ rolling_calibrations:
 
 mean_variance_optimization:
   total_turbines: 100
-  lambda_values: [0.0, 0.00005, 0.00001, 0.0001, 0.0005, 0.001, 0.01, 1.0, 'random']
+  lambda_values:
+    [0.0, 0.00005, 0.00001, 0.0001, 0.0005, 0.001, 0.01, 1.0, "random"]
   min_revenue_threshold: 0.0
+
+clustering:
+  n_workers: 4
+  threads_per_worker: 1
+  memory_limit: 4GB

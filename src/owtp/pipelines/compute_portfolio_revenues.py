@@ -59,7 +59,6 @@ class PortfolioRevenueComputer:
         self, 
         window: dict,
         param_suffix: str,
-        n_workers: int = None,
         verbose: bool = True
     ):
         """
@@ -68,7 +67,6 @@ class PortfolioRevenueComputer:
         Args:
             window: Dictionary with train_window_start, train_window_end, eval_window_start, eval_window_end
             param_suffix: Parameter suffix (e.g., "_(100)_(0.1)_(10.0)")
-            n_workers: Number of Dask workers
             verbose: Print computation information
         """
         
@@ -94,13 +92,14 @@ class PortfolioRevenueComputer:
         if verbose:
             print(f"\n  Loading hourly revenues for eval window...")
         
-        if n_workers is None:
-            n_workers = os.cpu_count() // 2
-        
+        n_workers = self.config['clustering']['n_workers']
+        threads_per_worker = self.config['clustering']['threads_per_worker']
+        memory_limit = self.config['clustering']['memory_limit']
+
         cluster = LocalCluster(
             n_workers=n_workers,
-            threads_per_worker=4,
-            memory_limit='20GB',
+            threads_per_worker=threads_per_worker,
+            memory_limit=memory_limit,
             processes=True,
             dashboard_address=':8789'
         )
@@ -248,12 +247,11 @@ class PortfolioRevenueComputer:
             print(f"    Hourly: {hourly_path}")
             print(f"    Summary: {summary_path}")
 
-    def compute_all_windows(self, n_workers: int = None, verbose: bool = True, include_random: bool = True):
+    def compute_all_windows(self, verbose: bool = True, include_random: bool = True):
         """
         Compute portfolio revenues for all windows and parameter combinations.
         
         Args:
-            n_workers: Number of Dask workers
             verbose: Print information
             include_random: Whether to include random portfolio baseline
         """
@@ -286,7 +284,6 @@ class PortfolioRevenueComputer:
                     self.compute_portfolio_revenues(
                         window=window,
                         param_suffix=param_suffix,
-                        n_workers=n_workers,
                         verbose=verbose
                     )
                 except Exception as e:
