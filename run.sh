@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Set to 'true' to run the demo 
+# (no weather data fetching and preprocessing,
+# will use the data that is manually placed in
+# 'src/owtp/data/weather/processed/weather/' and
+# in 'src/owtp/data/processed/roughness/' instead)
+demo=true
+
 echo "STARTING FBD PROJECT PIPELINE"
 
 # MacOS/ Linux:
@@ -25,23 +32,27 @@ echo "--------------------------------"
 uv run src/owtp/pipelines/merge_elec_prices.py
 echo ""
 
-echo "--------------------------------"
-echo "Fetching weather data..."
-echo "--------------------------------"
-uv run src/owtp/data/fetching/weather.py
-echo ""
+if [ "$demo" = true ] ; then
+    echo "Demo mode: skipping weather data fetching and preprocessing."
+else
+    echo "--------------------------------"
+    echo "Fetching weather data..."
+    echo "--------------------------------"
+    uv run src/owtp/data/fetching/weather.py
+    echo ""
 
-echo "--------------------------------"
-echo "Preprocessing data..."
-echo "--------------------------------"
-uv run src/owtp/pipelines/weather_data_preprocessing.py
-echo ""
+    echo "--------------------------------"
+    echo "Preprocessing data..."
+    echo "--------------------------------"
+    uv run src/owtp/pipelines/weather_data_preprocessing.py
+    echo ""
 
-echo "--------------------------------"
-echo "Fetching roughness data..."
-echo "--------------------------------"
-uv run src/owtp/data/fetching/roughness.py
-echo ""
+    echo "--------------------------------"
+    echo "Fetching roughness data..."
+    echo "--------------------------------"
+    uv run src/owtp/data/fetching/roughness.py
+    echo ""
+fi
 
 echo "--------------------------------"
 echo "Adjusting wind speed to turbine hub height..."

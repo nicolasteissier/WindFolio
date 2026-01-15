@@ -280,6 +280,8 @@ if __name__ == "__main__":
 
 
         for lambda_risk in lambda_values:
+            if lambda_risk == "random":
+                continue # random does not need optimization
             
             weights_cont, weights_int, results = optimizer.optimize(
                 total_turbines=total_turbines,

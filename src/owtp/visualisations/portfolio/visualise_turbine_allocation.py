@@ -175,7 +175,7 @@ def plot_turbine_allocation_window(
     scatter_objects_bg = []
     scatter_objects_alloc = []
     
-    for idx, lambda_val in enumerate(lambda_values):
+    for idx, lambda_val in enumerate(lambda_values[:4]):
         df = portfolio_dfs[idx]
         
         if len(df) == 0:
