@@ -7,11 +7,11 @@ Mean-variance approach to optimal wind turbine site selection and portfolio back
 As a demo run, we want to
 
 1. Reduce the amount of data to process
-2. Avoid relying on the ERA5-Land API
+2. Avoid relying on the ERA5-Land API (bottleneck)
 
 Download the [roughness](https://drive.switch.ch/index.php/s/cE58Ul3hUnZhLw6?path=%2Fprocessed%2Froughness%2Fera5%2Fhourly) data and place it in `data/processed/roughness/era5/hourly/`.
 
-Then, download a subset (one 'lat_bin=X/lon_bin=Y' folder) of the [pre-processed weather data](https://drive.switch.ch/index.php/s/cE58Ul3hUnZhLw6?path=%2Fprocessed%2Fparquet%2Fweather%2Fera5_land%2Fhourly) and place it in `data/processed/weather/era5_land/hourly/` (for example, `data/processed/weather/era5_land/hourly/lat_bin=42.0/lon_bin=2.0/` should contain several `part.*.parquet` files).
+Then, download a subset (one 'lat_bin=X/lon_bin=Y' folder) of the [pre-processed weather data](https://drive.switch.ch/index.php/s/cE58Ul3hUnZhLw6?path=%2Fprocessed%2Fparquet%2Fweather%2Fera5_land%2Fhourly) and place it in `data/processed/parquet/weather/era5_land/hourly/` (for example, `data/processed/parquet/weather/era5_land/hourly/lat_bin=42.0/lon_bin=2.0/` should contain several `part.*.parquet` files).
 
 Finally, set the `demo` variable to `true` in `run.sh`, and run:
 
@@ -20,6 +20,14 @@ chmod +x run.sh # (if not already executable)
 
 ./run.sh
 ```
+
+#### Troubleshooting: 
+If you get the following error: 
+````
+ModuleNotFoundError: No module named 'owtp'
+````
+
+Just delete `.venv` folder and re-run `./run.sh`
 
 ## Quick Start
 
